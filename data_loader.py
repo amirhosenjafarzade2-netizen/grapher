@@ -18,9 +18,9 @@ def load_reference_data(uploaded_file, debug=False):
                     if not coefficients:
                         skipped_rows.append(f"Row {index} ({name}): No valid coefficients")
                         continue
-                    # Normalize coefficients to prevent numerical issues
+                    # Normalize coefficients
                     max_coeff = max(abs(c) for c in coefficients if c != 0)
-                    if max_coeff > 1e10 or max_coeff < 1e-10:
+                    if max_coeff > 1e10 or (max_coeff < 1e-10 and max_coeff != 0):
                         skipped_rows.append(f"Row {index} ({name}): Extreme coefficient magnitude")
                         continue
                     coefficients = [c / max_coeff for c in coefficients] if max_coeff != 0 else coefficients
@@ -46,14 +46,12 @@ def load_reference_data(uploaded_file, debug=False):
                     skipped_rows.append(f"Row {index} ({name}): Invalid coefficients ({str(e)})")
         except Exception as e:
             skipped_rows.append(f"Excel parsing failed: {str(e)}")
-    if not data_ref:
-        skipped_rows.append("No valid data from Excel. Using sample data.")
-        # Sample data: varied polynomials
+    if not data_ref and debug:
+        skipped_rows.append("No valid data from Excel. Using default data for debug mode.")
         data_ref = [
             {'name': 'Curve1', 'coefficients': [1e-5, -0.01, 10, 100], 'degree': 3, 'scale_factor': 1.0},
             {'name': 'Curve2', 'coefficients': [2e-5, -0.02, 20, 200], 'degree': 3, 'scale_factor': 1.0},
-            {'name': 'Curve3', 'coefficients': [0, 0, 0.1, 50], 'degree': 2, 'scale_factor': 1.0},
-            {'name': 'Curve4', 'coefficients': [0.001, -1, 100], 'degree': 2, 'scale_factor': 1.0}
+            {'name': 'Curve3', 'coefficients': [0, 0, 0.1, 50], 'degree': 2, 'scale_factor': 1.0}
         ]
     if debug:
         return data_ref, skipped_rows
