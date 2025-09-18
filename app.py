@@ -1,4 +1,5 @@
 import streamlit as st
+import matplotlib.pyplot as plt
 from data_loader import load_reference_data
 from plotter import plot_graphs
 from io import BytesIO
@@ -8,6 +9,16 @@ import pandas as pd
 
 st.set_page_config(layout="wide")
 st.title("General Curve Plotter")
+
+# Sample Excel Download
+st.header("Sample Data")
+with open("sample_data.xlsx", "rb") as file:
+    st.download_button(
+        label="Download Sample Excel",
+        data=file,
+        file_name="sample_data.xlsx",
+        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+    )
 
 # Debug Toggle
 debug = st.checkbox("Enable Debug Mode (Show Data and Logs)", value=False)
@@ -63,15 +74,15 @@ st.header("Grid and Ticks")
 show_grid = st.checkbox("Show Grid?", value=True)
 col_grid1, col_grid2 = st.columns(2)
 with col_grid1:
-    grid_major_x = st.number_input("Major Grid X", value=suggest_major_x, min_value=0.0)
-    grid_minor_x = st.number_input("Minor Grid X", value=suggest_minor_x, min_value=0.0)
-    x_major_int = st.number_input("X Major Tick Interval", value=suggest_major_x, min_value=0.0)
-    x_minor_int = st.number_input("X Minor Tick Interval", value=suggest_minor_x, min_value=0.0)
+    grid_major_x = st.number_input("Major Grid X", value=suggest_major_x, min_value=1e-10)
+    grid_minor_x = st.number_input("Minor Grid X", value=suggest_minor_x, min_value=1e-10)
+    x_major_int = st.number_input("X Major Tick Interval", value=suggest_major_x, min_value=1e-10)
+    x_minor_int = st.number_input("X Minor Tick Interval", value=suggest_minor_x, min_value=1e-10)
 with col_grid2:
-    grid_major_y = st.number_input("Major Grid Y", value=suggest_major_y, min_value=0.0)
-    grid_minor_y = st.number_input("Minor Grid Y", value=suggest_minor_y, min_value=0.0)
-    y_major_int = st.number_input("Y Major Tick Interval", value=suggest_major_y, min_value=0.0)
-    y_minor_int = st.number_input("Y Minor Tick Interval", value=suggest_minor_y, min_value=0.0)
+    grid_major_y = st.number_input("Major Grid Y", value=suggest_major_y, min_value=1e-10)
+    grid_minor_y = st.number_input("Minor Grid Y", value=suggest_minor_y, min_value=1e-10)
+    y_major_int = st.number_input("Y Major Tick Interval", value=suggest_major_y, min_value=1e-10)
+    y_minor_int = st.number_input("Y Minor Tick Interval", value=suggest_minor_y, min_value=1e-10)
 
 # Axis Details
 st.header("Axis Positions and Frame")
@@ -127,6 +138,15 @@ if st.button("Generate Plot(s)"):
             if skipped_curves:
                 st.subheader("Skipped Curves")
                 st.write("\n".join(skipped_curves))
+            # Sample points
+            st.subheader("Sample Curve Points")
+            sample_points = []
+            for entry in data_ref:
+                x_samples = np.linspace(x_min, x_max, 5)
+                y_samples = np.polyval(entry['coefficients'], (x_samples - (x_max + x_min)/2) / ((x_max - x_min)/2))
+                for x, y in zip(x_samples, y_samples):
+                    sample_points.append({"Curve": entry['name'], "X": x, "Y": y})
+            st.dataframe(pd.DataFrame(sample_points))
         else:
             data_ref = load_reference_data(uploaded_file)
             figs = plot_graphs(
