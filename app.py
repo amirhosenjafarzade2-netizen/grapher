@@ -15,7 +15,7 @@ debug = st.checkbox("Enable Debug Mode (Show Data and Logs)", value=False)
 
 # Axis Ranges
 st.header("Axis Ranges")
-col_axis_options = st.columns(3)
+col_axis_options = st.columns(4)
 with col_axis_options[0]:
     auto_scale_y = st.checkbox(
         "Auto-Scale Y-Axis (Depth)", 
@@ -34,14 +34,20 @@ with col_axis_options[2]:
         value=True,
         help="If checked, curves stop at the first point where they exit X Min/X Max. If unchecked, includes all points within X Min/X Max."
     )
+with col_axis_options[3]:
+    invert_y_axis = st.checkbox(
+        "Invert Y-Axis", 
+        value=False,
+        help="If checked, inverts the Y-axis (Depth increases upward). Use with caution when centering axes at (0,0)."
+    )
 
 col_range1, col_range2, col_range3, col_range4 = st.columns(4)
 with col_range1:
-    x_min = st.number_input("X Min (Pressure, psi)", value=0.0, help="Can be negative")
+    x_min = st.number_input("X Min (Pressure, psi)", value=-1000.0, help="Can be negative")
 with col_range2:
     x_max = st.number_input("X Max (Pressure, psi)", value=4000.0)
 with col_range3:
-    y_min = st.number_input("Y Min (Depth, ft)", value=0.0, help="Can be negative", disabled=auto_scale_y)
+    y_min = st.number_input("Y Min (Depth, ft)", value=-1000.0, help="Can be negative", disabled=auto_scale_y)
 with col_range4:
     y_max = st.number_input("Y Max (Depth, ft)", value=1000.0, disabled=auto_scale_y)
 
@@ -70,10 +76,10 @@ with col_style1:
     if use_colorful:
         num_colors = st.number_input("Number of Distinct Colors", min_value=5, max_value=50, value=35)
     else:
-        num_colors = 1  # Default for black and white
+        num_colors = 1
     bg_color = st.color_picker("Background Color", value='#F5F5F5' if use_colorful else '#FFFFFF')
 with col_style2:
-    legend_loc = st.selectbox("Legend Placement", ["Upper Right", "Upper Left", "Lower Right", "Lower Left", "Center Left"], index=4)
+    legend_loc = st.selectbox("Legend Placement", ["Upper Right", "Upper Left", "Lower Right", "Lower Left", "Center Left", "Center Right", "Upper Center", "Lower Center", "Center", "Best"], index=4)
     custom_legends = st.text_area("Custom Legends (name: #hex_color or name, one per line)", help="Overrides Excel names. E.g., Curve1: #ff0000")
 
 # Plot Grouping
@@ -124,7 +130,7 @@ if st.button("Generate Plot(s)"):
             st.error("No valid data loaded from Excel. Please check file format.")
             st.stop()
 
-        # Handle auto-scaling in the app to ensure consistency
+        # Handle auto-scaling
         if auto_scale_y:
             y_vals_all = []
             for entry in data_ref:
@@ -144,8 +150,8 @@ if st.button("Generate Plot(s)"):
                     y_min -= 1
                     y_max += 1
             else:
-                y_min, y_max = 0, 1000
-                st.warning("Auto-scale failed: No valid y-values. Using default range [0, 1000].")
+                y_min, y_max = -1000, 1000
+                st.warning("Auto-scale failed: No valid y-values. Using default range [-1000, 1000].")
 
         # Generate plots
         result = plot_graphs(
@@ -178,16 +184,13 @@ if st.button("Generate Plot(s)"):
             stop_y_exit=stop_y_exit,
             stop_x_exit=stop_x_exit,
             debug=debug,
-            invert_y_axis=False,  # Disable y-axis inversion to ensure curves appear
+            invert_y_axis=invert_y_axis,
             figsize=(10, 6),
             dpi=300
         )
 
-        # Handle debug vs non-debug return values
-        if debug:
-            figs, skipped_curves = result
-        else:
-            figs, skipped_curves = result, []
+        # Handle return value
+        figs, skipped_curves = result
 
         if not figs:
             st.error("No plots generated. Enable debug mode to diagnose issues.")
@@ -249,6 +252,8 @@ if st.button("Generate Plot(s)"):
                     ax_debug.spines['top'].set_color('none')
                     ax_debug.xaxis.set_ticks_position('bottom' if x_pos.lower() == 'bottom' else 'top')
                     ax_debug.yaxis.set_ticks_position('left' if y_pos.lower() == 'left' else 'right')
+                if invert_y_axis:
+                    ax_debug.invert_yaxis()
                 ax_debug.legend()
                 ax_debug.set_title("Debug: Sample Points")
                 st.pyplot(fig_debug)
