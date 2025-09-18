@@ -55,6 +55,11 @@ def plot_graphs(data_ref, use_colorful, num_colors, bg_color, legend_loc, custom
             coeffs = entry['coefficients']
             degree = entry['degree']
 
+            # Check for extreme coefficients
+            if any(abs(c) > 1e10 for c in coeffs):
+                skipped_curves.append(f"Curve {name}: Coefficients too large (>1e10)")
+                continue
+
             if func_type == 'Polynomial':
                 def polynomial(x, coeffs):
                     try:
@@ -67,14 +72,13 @@ def plot_graphs(data_ref, use_colorful, num_colors, bg_color, legend_loc, custom
                 x_shift = (x_max + x_min) / 2
                 p1_full_scaled = np.linspace(-1, 1.5 if allow_reentry_x else 1, 1000)
                 p1_full = p1_full_scaled * x_scale + x_shift
-                y_vals = polynomial(p1_full_scaled, coeffs)  # Evaluate in scaled space
+                y_vals = polynomial(p1_full_scaled, coeffs)
                 if np.all(np.isnan(y_vals)):
                     skipped_curves.append(f"Curve {name}: No valid polynomial output")
                     continue
 
-                # Scale y if needed (optional, adjust based on testing)
-                if np.max(np.abs(y_vals)) > 1e10 or np.min(np.abs(y_vals)) < 1e-10:
-                    skipped_curves.append(f"Curve {name}: Extreme y-values detected")
+                if np.max(np.abs(y_vals[np.isfinite(y_vals)])) > 1e10:
+                    skipped_curves.append(f"Curve {name}: Extreme y-values detected (>1e10)")
                     continue
 
                 segments = []
@@ -113,7 +117,7 @@ def plot_graphs(data_ref, use_colorful, num_colors, bg_color, legend_loc, custom
                     label_positions.append((end_x, end_y))
 
         if not use_colorful:
-            adjust_text(texts, ax=ax)
+            adjust_text(texts, ax=ax, only_move={'points': 'y', 'text': 'xy'})
 
         # Axis setup
         ax.set_xlabel(x_label)
@@ -170,6 +174,10 @@ def plot_graphs(data_ref, use_colorful, num_colors, bg_color, legend_loc, custom
             coeffs = entry['coefficients']
             degree = entry['degree']
 
+            if any(abs(c) > 1e10 for c in coeffs):
+                skipped_curves.append(f"Curve {name}: Coefficients too large (>1e10)")
+                continue
+
             fig, ax = plt.subplots(figsize=(12, 8), dpi=150)
             fig.patch.set_facecolor(bg_color)
             ax.set_facecolor(bg_color)
@@ -190,8 +198,8 @@ def plot_graphs(data_ref, use_colorful, num_colors, bg_color, legend_loc, custom
                     skipped_curves.append(f"Curve {name}: No valid polynomial output")
                     continue
 
-                if np.max(np.abs(y_vals)) > 1e10 or np.min(np.abs(y_vals)) < 1e-10:
-                    skipped_curves.append(f"Curve {name}: Extreme y-values detected")
+                if np.max(np.abs(y_vals[np.isfinite(y_vals)])) > 1e10:
+                    skipped_curves.append(f"Curve {name}: Extreme y-values detected (>1e10)")
                     continue
 
                 segments = []
@@ -226,7 +234,7 @@ def plot_graphs(data_ref, use_colorful, num_colors, bg_color, legend_loc, custom
                     end_x, end_y = end_seg[-1]
                     end_y -= (y_max - y_min) / 100
                     text = ax.text(end_x, end_y, label, fontsize=8, ha='left', va='center')
-                    adjust_text([text], ax=ax)
+                    adjust_text([text], ax=ax, only_move={'points': 'y', 'text': 'xy'})
 
             # Axis setup
             ax.set_xlabel(x_label)
