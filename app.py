@@ -36,10 +36,10 @@ with col_style1:
     color_mode = st.radio("Color Mode", ["Colorful", "Black and White"])
     use_colorful = color_mode == "Colorful"
     if use_colorful:
-        num_colors = st.number_input("Number of Distinct Colors", min_value=5, max_value=15, value=10)
+        num_colors = st.number_input("Number of Distinct Colors", min_value=5, max_value=30, value=10)
     bg_color = st.color_picker("Background Color", value='#F5F5F5' if use_colorful else '#FFFFFF')
 with col_style2:
-    legend_loc = st.selectbox("Legend Placement", ["upper right", "upper left", "lower right", "lower left", "center left"])
+    legend_loc = st.selectbox("Legend Placement", ["Upper Right", "Upper Left", "Lower Right", "Lower Left", "Center Left", "Center Top", "Center Bottom"])
     custom_legends = st.text_area("Custom Legends (name: #hex_color or name, one per line)", help="Overrides Excel names. E.g., Curve1: #ff0000")
 
 # Plot Grouping
