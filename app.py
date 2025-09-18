@@ -4,9 +4,13 @@ from plotter import plot_graphs
 from io import BytesIO
 import base64
 import numpy as np
+import pandas as pd
 
 st.set_page_config(layout="wide")
 st.title("General Curve Plotter")
+
+# Debug Toggle
+debug = st.checkbox("Enable Debug Mode (Show Data and Logs)", value=False)
 
 # Axis Ranges (first)
 st.header("Axis Ranges")
@@ -17,6 +21,14 @@ with col_range1:
 with col_range2:
     y_min = st.number_input("Y Min", value=0.0, help="Can be negative")
     y_max = st.number_input("Y Max", value=31000.0)
+
+# Validate ranges
+if x_min >= x_max:
+    st.error("X Max must be greater than X Min")
+    st.stop()
+if y_min >= y_max:
+    st.error("Y Max must be greater than Y Min")
+    st.stop()
 
 # Suggest intervals
 suggest_major_x = round((x_max - x_min) / 10, -int(np.log10((x_max - x_min)/10)) + 1) if x_max > x_min else 1000
@@ -51,15 +63,15 @@ st.header("Grid and Ticks")
 show_grid = st.checkbox("Show Grid?", value=True)
 col_grid1, col_grid2 = st.columns(2)
 with col_grid1:
-    grid_major_x = st.number_input("Major Grid X", value=suggest_major_x)
-    grid_minor_x = st.number_input("Minor Grid X", value=suggest_minor_x)
-    x_major_int = st.number_input("X Major Tick Interval", value=suggest_major_x)
-    x_minor_int = st.number_input("X Minor Tick Interval", value=suggest_minor_x)
+    grid_major_x = st.number_input("Major Grid X", value=suggest_major_x, min_value=0.0)
+    grid_minor_x = st.number_input("Minor Grid X", value=suggest_minor_x, min_value=0.0)
+    x_major_int = st.number_input("X Major Tick Interval", value=suggest_major_x, min_value=0.0)
+    x_minor_int = st.number_input("X Minor Tick Interval", value=suggest_minor_x, min_value=0.0)
 with col_grid2:
-    grid_major_y = st.number_input("Major Grid Y", value=suggest_major_y)
-    grid_minor_y = st.number_input("Minor Grid Y", value=suggest_minor_y)
-    y_major_int = st.number_input("Y Major Tick Interval", value=suggest_major_y)
-    y_minor_int = st.number_input("Y Minor Tick Interval", value=suggest_minor_y)
+    grid_major_y = st.number_input("Major Grid Y", value=suggest_major_y, min_value=0.0)
+    grid_minor_y = st.number_input("Minor Grid Y", value=suggest_minor_y, min_value=0.0)
+    y_major_int = st.number_input("Y Major Tick Interval", value=suggest_major_y, min_value=0.0)
+    y_minor_int = st.number_input("Y Minor Tick Interval", value=suggest_minor_y, min_value=0.0)
 
 # Axis Details
 st.header("Axis Positions and Frame")
@@ -89,17 +101,48 @@ y_label = st.text_input("Y Label", value="Y Axis")
 
 # Generate
 if st.button("Generate Plot(s)"):
+    plt.close('all')  # Clear figure cache
     with st.spinner("Loading data and generating plot(s)..."):
-        data_ref = load_reference_data(uploaded_file)
+        if debug:
+            data_ref, skipped_rows = load_reference_data(uploaded_file, debug=True)
+            figs, skipped_curves = plot_graphs(
+                data_ref, use_colorful, num_colors if use_colorful else 1, bg_color, legend_loc, custom_legends, 
+                scale_type, show_grid, grid_major_x if show_grid else suggest_major_x, grid_minor_x if show_grid else suggest_minor_x,
+                grid_major_y if show_grid else suggest_major_y, grid_minor_y if show_grid else suggest_minor_y,
+                func_type, x_min, x_max, y_min, y_max, x_pos, y_pos, plot_frame,
+                x_major_int, x_minor_int, y_major_int, y_minor_int, allow_reentry_x, allow_reentry_y,
+                title, x_label, y_label, plot_grouping, debug=True)
+            
+            # Debug info
+            st.header("Debug Information")
+            st.subheader("Loaded Data")
+            debug_data = [
+                {"Name": entry['name'], "Degree": entry['degree'], "Coefficients": entry['coefficients']}
+                for entry in data_ref
+            ]
+            st.dataframe(pd.DataFrame(debug_data))
+            if skipped_rows:
+                st.subheader("Skipped Excel Rows")
+                st.write("\n".join(skipped_rows))
+            if skipped_curves:
+                st.subheader("Skipped Curves")
+                st.write("\n".join(skipped_curves))
+        else:
+            data_ref = load_reference_data(uploaded_file)
+            figs = plot_graphs(
+                data_ref, use_colorful, num_colors if use_colorful else 1, bg_color, legend_loc, custom_legends, 
+                scale_type, show_grid, grid_major_x if show_grid else suggest_major_x, grid_minor_x if show_grid else suggest_minor_x,
+                grid_major_y if show_grid else suggest_major_y, grid_minor_y if show_grid else suggest_minor_y,
+                func_type, x_min, x_max, y_min, y_max, x_pos, y_pos, plot_frame,
+                x_major_int, x_minor_int, y_major_int, y_minor_int, allow_reentry_x, allow_reentry_y,
+                title, x_label, y_label, plot_grouping)
+
+        if not figs:
+            st.error("No plots generated. Check debug mode for details.")
+            st.stop()
+
         if plot_grouping == "All in One" and len(data_ref) > 15:
             st.warning("More than 15 curves in one plot may be cluttered. Consider 'One per Curve'.")
-        
-        figs = plot_graphs(data_ref, use_colorful, num_colors if use_colorful else 1, bg_color, legend_loc, custom_legends, 
-                          scale_type, show_grid, grid_major_x if show_grid else suggest_major_x, grid_minor_x if show_grid else suggest_minor_x,
-                          grid_major_y if show_grid else suggest_major_y, grid_minor_y if show_grid else suggest_minor_y,
-                          func_type, x_min, x_max, y_min, y_max, x_pos, y_pos, plot_frame,
-                          x_major_int, x_minor_int, y_major_int, y_minor_int, allow_reentry_x, allow_reentry_y,
-                          title, x_label, y_label, plot_grouping)
 
         for i, (fig, curve_name) in enumerate(figs):
             st.subheader(f"Plot {i+1}" + (f": {curve_name}" if plot_grouping == "One per Curve" else ""))
