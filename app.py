@@ -77,22 +77,31 @@ with col_range2:
         help="Maximum X value (Pressure, psi) - can be very large or small",
         key="x_max_range"
     )
+
+# Y-axis controls with conditional rendering
 with col_range3:
-    y_min_input = st.number_input(
-        "Y Min", 
-        value=-1000.0, 
-        help="Minimum Y value (Depth, ft) - can be negative",
-        disabled=auto_scale_y,
-        key="y_min_range"
-    )
+    if auto_scale_y:
+        st.info("📏 Y-axis will be auto-scaled based on data")
+        y_min_input = -1000.0  # Default for auto-scale
+    else:
+        y_min_input = st.number_input(
+            "Y Min", 
+            value=-1000.0, 
+            help="Minimum Y value (Depth, ft) - can be negative",
+            key="y_min_range"
+        )
+
 with col_range4:
-    y_max_input = st.number_input(
-        "Y Max", 
-        value=1000.0, 
-        help="Maximum Y value (Depth, ft)",
-        disabled=auto_scale_y,
-        key="y_max_range"
-    )
+    if auto_scale_y:
+        st.info("📏 Y-axis will be auto-scaled based on data")
+        y_max_input = 1000.0  # Default for auto-scale
+    else:
+        y_max_input = st.number_input(
+            "Y Max", 
+            value=1000.0, 
+            help="Maximum Y value (Depth, ft)",
+            key="y_max_range"
+        )
 
 # Range validation
 if x_min >= x_max:
