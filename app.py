@@ -1,222 +1,44 @@
-import streamlit as st
-import matplotlib.pyplot as plt
-from data_loader import load_reference_data
-from plotter import plot_graphs
-from io import BytesIO
-import base64
-import numpy as np
 import pandas as pd
+import numpy as np
 
-st.set_page_config(layout="wide")
-st.title("Curve Plotter")
-
-# Debug Toggle
-debug = st.checkbox("Enable Debug Mode (Show Data and Logs)", value=False)
-
-# Axis Ranges
-st.header("Axis Ranges")
-col_range1, col_range2 = st.columns(2)
-with col_range1:
-    x_min = st.number_input("X Min (Pressure, psi)", value=0.0, help="Can be negative")
-    x_max = st.number_input("X Max (Pressure, psi)", value=4000.0)
-with col_range2:
-    auto_scale_y = st.checkbox("Auto-Scale Y-Axis (Depth)", value=False)
-    if not auto_scale_y:
-        y_min = st.number_input("Y Min (Depth, ft)", value=0.0, help="Can be negative")
-        y_max = st.number_input("Y Max (Depth, ft)", value=31000.0)
-    else:
-        y_min, y_max = 0.0, 1.0  # Will be computed later
-
-# Validate ranges
-if x_min >= x_max:
-    st.error("X Max must be greater than X Min")
-    st.stop()
-if not auto_scale_y and y_min >= y_max:
-    st.error("Y Max must be greater than Y Min")
-    st.stop()
-
-# Data Upload
-st.header("Upload Excel Data")
-st.markdown("Excel format: col0 = name (e.g., 'Curve1'), col1-6 = coefficients (a, b, c, d, e, f for a*x^5 + b*x^4 + ... + f).")
-uploaded_file = st.file_uploader("Upload Excel", type=['xlsx'])
-if not uploaded_file and not debug:
-    st.warning("Please upload an Excel file to generate plots.")
-    st.stop()
-
-# Plot Style
-st.header("Plot Style")
-col_style1, col_style2 = st.columns(2)
-with col_style1:
-    color_mode = st.radio("Color Mode", ["Colorful", "Black and White"])
-    use_colorful = color_mode == "Colorful"
-    if use_colorful:
-        num_colors = st.number_input("Number of Distinct Colors", min_value=5, max_value=15, value=10)
-    bg_color = st.color_picker("Background Color", value='#F5F5F5' if use_colorful else '#FFFFFF')
-with col_style2:
-    legend_loc = st.selectbox("Legend Placement", ["Upper Right", "Upper Left", "Lower Right", "Lower Left", "Center Left"], index=4)
-    custom_legends = st.text_area("Custom Legends (name: #hex_color or name, one per line)", help="Overrides Excel names. E.g., Curve1: #ff0000")
-
-# Plot Grouping
-st.header("Plot Grouping")
-plot_grouping = st.radio("Plot all curves on one graph or one graph per curve?", ["All in One", "One per Curve"])
-
-# Grid and Ticks
-st.header("Grid and Ticks")
-show_grid = st.checkbox("Show Grid?", value=True)
-col_grid1, col_grid2 = st.columns(2)
-with col_grid1:
-    grid_major_x = st.number_input("Major Grid X (psi)", value=1000.0, min_value=1e-10)
-    grid_minor_x = st.number_input("Minor Grid X (psi)", value=200.0, min_value=1e-10)
-    x_major_int = st.number_input("X Major Tick Interval (psi)", value=1000.0, min_value=1e-10)
-    x_minor_int = st.number_input("X Minor Tick Interval (psi)", value=200.0, min_value=1e-10)
-with col_grid2:
-    grid_major_y = st.number_input("Major Grid Y (ft)", value=1000.0, min_value=1e-10)
-    grid_minor_y = st.number_input("Minor Grid Y (ft)", value=200.0, min_value=1e-10)
-    y_major_int = st.number_input("Y Major Tick Interval (ft)", value=1000.0, min_value=1e-10)
-    y_minor_int = st.number_input("Y Minor Tick Interval (ft)", value=200.0, min_value=1e-10)
-
-# Axis Details
-st.header("Axis Positions")
-col_axis1, col_axis2 = st.columns(2)
-with col_axis1:
-    x_pos = st.radio("X Axis Position", ["Top", "Bottom"], index=0)
-    y_pos = st.radio("Y Axis Position", ["Left", "Right"], index=0)
-
-# Titles and Labels
-st.header("Chart Labels")
-title = st.text_input("Chart Title", value="Curve Plot")
-x_label = st.text_input("X Label", value="Gradient Pressure, psi")
-y_label = st.text_input("Y Label", value="Depth, ft")
-
-# Generate
-if st.button("Generate Plot(s)"):
-    plt.close('all')  # Clear figure cache
-    with st.spinner("Loading data and generating plot(s)..."):
-        if debug:
-            data_ref, skipped_rows = load_reference_data(uploaded_file, debug=True)
-            if auto_scale_y:
-                y_vals_all = []
-                for entry in data_ref:
-                    coeffs = entry['coefficients']
-                    x_vals = np.linspace(x_min, x_max, 100)
-                    y_vals = np.array([coeffs['a']*x**5 + coeffs['b']*x**4 + coeffs['c']*x**3 + 
-                                     coeffs['d']*x**2 + coeffs['e']*x + coeffs['f'] for x in x_vals])
-                    y_vals = y_vals[np.isfinite(y_vals)]
-                    if len(y_vals) > 0:
-                        y_vals_all.extend(y_vals)
-                if y_vals_all:
-                    y_min = float(np.min(y_vals_all) * 1.2)
-                    y_max = float(np.max(y_vals_all) * 1.2)
-                    if y_min == y_max:
-                        y_min -= 1
-                        y_max += 1
-                else:
-                    y_min, y_max = 0, 31000
-                    st.warning("Auto-scale failed: No valid y-values. Using default range [0, 31000].")
-            figs, skipped_curves = plot_graphs(
-                data_ref, use_colorful, num_colors if use_colorful else 1, bg_color, legend_loc, custom_legends,
-                show_grid, grid_major_x, grid_minor_x, grid_major_y, grid_minor_y,
-                x_min, x_max, y_min, y_max, x_pos, y_pos,
-                x_major_int, x_minor_int, y_major_int, y_minor_int,
-                title, x_label, y_label, plot_grouping, debug=True)
-            
-            # Debug info
-            st.header("Debug Information")
-            st.subheader("Loaded Data")
-            debug_data = [
-                {
-                    "Name": entry['name'],
-                    "Coefficients": [entry['coefficients'][k] for k in ['a', 'b', 'c', 'd', 'e', 'f']]
-                } for entry in data_ref
-            ]
-            st.dataframe(pd.DataFrame(debug_data))
-            if skipped_rows:
-                st.subheader("Skipped Excel Rows")
-                st.write("\n".join(skipped_rows))
-            if skipped_curves:
-                st.subheader("Skipped Curves")
-                st.write("\n".join(skipped_curves))
-            # Sample points
-            st.subheader("Sample Curve Points")
-            sample_points = []
-            for entry in data_ref:
-                coeffs = entry['coefficients']
-                x_samples = np.linspace(x_min, x_max, 10)
-                y_samples = np.array([coeffs['a']*x**5 + coeffs['b']*x**4 + coeffs['c']*x**3 + 
-                                    coeffs['d']*x**2 + coeffs['e']*x + coeffs['f'] for x in x_samples])
-                y_finite = y_samples[np.isfinite(y_samples)]
-                min_y = float(np.min(y_finite)) if len(y_finite) > 0 else None
-                max_y = float(np.max(y_finite)) if len(y_finite) > 0 else None
-                for x, y in zip(x_samples, y_samples):
-                    sample_points.append({
-                        "Curve": entry['name'],
-                        "X (psi)": x,
-                        "Y (ft)": y,
-                        "Min Y (Curve)": min_y,
-                        "Max Y (Curve)": max_y
+def load_reference_data(uploaded_file, debug=False):
+    data_ref = []
+    skipped_rows = []
+    if uploaded_file is not None:
+        try:
+            df_ref = pd.read_excel(uploaded_file, header=None, engine='openpyxl')
+            for index, row in df_ref.iterrows():
+                name = str(row[0]).strip() if pd.notna(row[0]) else None
+                if not name:
+                    skipped_rows.append(f"Row {index}: Empty or invalid name")
+                    continue
+                try:
+                    coefficients = {
+                        'a': float(row[1]) if pd.notna(row[1]) else 0.0,
+                        'b': float(row[2]) if pd.notna(row[2]) else 0.0,
+                        'c': float(row[3]) if pd.notna(row[3]) else 0.0,
+                        'd': float(row[4]) if pd.notna(row[4]) else 0.0,
+                        'e': float(row[5]) if pd.notna(row[5]) else 0.0,
+                        'f': float(row[6]) if len(row) > 6 and pd.notna(row[6]) else 0.0
+                    }
+                    if not any(coefficients.values()):
+                        skipped_rows.append(f"Row {index} ({name}): All coefficients are zero")
+                        continue
+                    data_ref.append({
+                        'name': name,
+                        'coefficients': coefficients
                     })
-            st.dataframe(pd.DataFrame(sample_points))
-            # Debug plot
-            if sample_points:
-                fig_debug, ax_debug = plt.subplots(figsize=(8, 6))
-                for curve_name in set(p['Curve'] for p in sample_points):
-                    curve_points = [p for p in sample_points if p['Curve'] == curve_name]
-                    x_vals = [p['X (psi)'] for p in curve_points]
-                    y_vals = [p['Y (ft)'] for p in curve_points]
-                    ax_debug.scatter(x_vals, y_vals, label=curve_name, s=50)
-                ax_debug.set_xlabel(x_label)
-                ax_debug.set_ylabel(y_label)
-                ax_debug.set_xlim(x_min, x_max)
-                ax_debug.set_ylim(y_min, y_max)
-                ax_debug.invert_yaxis()
-                ax_debug.legend()
-                ax_debug.set_title("Debug: Sample Points")
-                st.pyplot(fig_debug)
-                plt.close(fig_debug)
-        else:
-            data_ref = load_reference_data(uploaded_file)
-            if not data_ref:
-                st.error("No valid data loaded from Excel. Please check file format.")
-                st.stop()
-            if auto_scale_y:
-                y_vals_all = []
-                for entry in data_ref:
-                    coeffs = entry['coefficients']
-                    x_vals = np.linspace(x_min, x_max, 100)
-                    y_vals = np.array([coeffs['a']*x**5 + coeffs['b']*x**4 + coeffs['c']*x**3 + 
-                                     coeffs['d']*x**2 + coeffs['e']*x + coeffs['f'] for x in x_vals])
-                    y_vals = y_vals[np.isfinite(y_vals)]
-                    if len(y_vals) > 0:
-                        y_vals_all.extend(y_vals)
-                if y_vals_all:
-                    y_min = float(np.min(y_vals_all) * 1.2)
-                    y_max = float(np.max(y_vals_all) * 1.2)
-                    if y_min == y_max:
-                        y_min -= 1
-                        y_max += 1
-                else:
-                    y_min, y_max = 0, 31000
-                    st.warning("Auto-scale failed: No valid y-values. Using default range [0, 31000].")
-            figs = plot_graphs(
-                data_ref, use_colorful, num_colors if use_colorful else 1, bg_color, legend_loc, custom_legends,
-                show_grid, grid_major_x, grid_minor_x, grid_major_y, grid_minor_y,
-                x_min, x_max, y_min, y_max, x_pos, y_pos,
-                x_major_int, x_minor_int, y_major_int, y_minor_int,
-                title, x_label, y_label, plot_grouping)
-
-        if not figs:
-            st.error("No plots generated. Enable debug mode to diagnose issues.")
-            st.stop()
-
-        if plot_grouping == "All in One" and len(data_ref) > 15:
-            st.warning("More than 15 curves in one plot may be cluttered. Consider 'One per Curve'.")
-
-        for i, (fig, curve_name) in enumerate(figs):
-            st.subheader(f"Plot {i+1}" + (f": {curve_name}" if plot_grouping == "One per Curve" else ""))
-            st.pyplot(fig)
-            buf = BytesIO()
-            fig.savefig(buf, format="png", bbox_inches='tight')
-            buf.seek(0)
-            b64 = base64.b64encode(buf.read()).decode()
-            href = f'<a href="data:image/png;base64,{b64}" download="curve_plot_{curve_name if plot_grouping == "One per Curve" else "all"}.png">Download Plot</a>'
-            st.markdown(href, unsafe_allow_html=True)
+                except (ValueError, TypeError) as e:
+                    skipped_rows.append(f"Row {index} ({name}): Invalid coefficients ({str(e)})")
+        except Exception as e:
+            skipped_rows.append(f"Excel parsing failed: {str(e)}")
+    if not data_ref and debug:
+        skipped_rows.append("No valid data from Excel. Using default data for debug mode.")
+        data_ref = [
+            {'name': 'Curve1', 'coefficients': {'a': 1e-10, 'b': -1e-7, 'c': 1e-4, 'd': -0.1, 'e': 100, 'f': 0}},
+            {'name': 'Curve2', 'coefficients': {'a': 1.1e-10, 'b': -1.1e-7, 'c': 1.1e-4, 'd': -0.11, 'e': 110, 'f': 0}},
+            {'name': 'Curve3', 'coefficients': {'a': 0, 'b': 0, 'c': 1e-4, 'd': -0.1, 'e': 100, 'f': 0}}
+        ]
+    if debug:
+        return data_ref, skipped_rows
+    return data_ref
