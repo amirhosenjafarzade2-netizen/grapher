@@ -15,17 +15,20 @@ debug = st.checkbox("Enable Debug Mode (Show Data and Logs)", value=False)
 
 # Axis Ranges
 st.header("Axis Ranges")
-col_range1, col_range2 = st.columns(2)
+auto_scale_y = st.checkbox(
+    "Auto-Scale Y-Axis (Depth)", 
+    value=False,
+    help="Automatically adjusts Y Min and Y Max to fit all curves based on computed values. If unchecked, uses fixed ranges (default: 0 to 31,000 ft)."
+)
+col_range1, col_range2, col_range3, col_range4 = st.columns(4)
 with col_range1:
     x_min = st.number_input("X Min (Pressure, psi)", value=0.0, help="Can be negative")
-    x_max = st.number_input("X Max (Pressure, psi)", value=4000.0)
 with col_range2:
-    auto_scale_y = st.checkbox("Auto-Scale Y-Axis (Depth)", value=False)
-    if not auto_scale_y:
-        y_min = st.number_input("Y Min (Depth, ft)", value=0.0, help="Can be negative")
-        y_max = st.number_input("Y Max (Depth, ft)", value=31000.0)
-    else:
-        y_min, y_max = 0.0, 1.0  # Will be computed later
+    x_max = st.number_input("X Max (Pressure, psi)", value=4000.0)
+with col_range3:
+    y_min = st.number_input("Y Min (Depth, ft)", value=0.0, help="Can be negative", disabled=auto_scale_y)
+with col_range4:
+    y_max = st.number_input("Y Max (Depth, ft)", value=31000.0, disabled=auto_scale_y)
 
 # Validate ranges
 if x_min >= x_max:
@@ -37,7 +40,7 @@ if not auto_scale_y and y_min >= y_max:
 
 # Data Upload
 st.header("Upload Excel Data")
-st.markdown("Excel format: col0 = name (e.g., 'Curve1'), col1-6 = coefficients (a, b, c, d, e, f for a*x^5 + b*x^4 + ... + f).")
+st.markdown("Excel format: col0 = name (e.g., 'Curve1'), col1+ = coefficients (highest to lowest degree, e.g., a, b, c, d, e, f for 5th-degree).")
 uploaded_file = st.file_uploader("Upload Excel", type=['xlsx'])
 if not uploaded_file and not debug:
     st.warning("Please upload an Excel file to generate plots.")
@@ -50,7 +53,7 @@ with col_style1:
     color_mode = st.radio("Color Mode", ["Colorful", "Black and White"])
     use_colorful = color_mode == "Colorful"
     if use_colorful:
-        num_colors = st.number_input("Number of Distinct Colors", min_value=5, max_value=15, value=10)
+        num_colors = st.number_input("Number of Distinct Colors", min_value=5, max_value=50, value=30)
     bg_color = st.color_picker("Background Color", value='#F5F5F5' if use_colorful else '#FFFFFF')
 with col_style2:
     legend_loc = st.selectbox("Legend Placement", ["Upper Right", "Upper Left", "Lower Right", "Lower Left", "Center Left"], index=4)
@@ -98,21 +101,23 @@ if st.button("Generate Plot(s)"):
                 y_vals_all = []
                 for entry in data_ref:
                     coeffs = entry['coefficients']
-                    x_vals = np.linspace(x_min, x_max, 100)
-                    y_vals = np.array([coeffs['a']*x**5 + coeffs['b']*x**4 + coeffs['c']*x**3 + 
-                                     coeffs['d']*x**2 + coeffs['e']*x + coeffs['f'] for x in x_vals])
+                    x_vals = np.linspace(x_min, x_max, 1000)  # Increased resolution
+                    y_vals = np.polyval(coeffs, x_vals)
                     y_vals = y_vals[np.isfinite(y_vals)]
                     if len(y_vals) > 0:
                         y_vals_all.extend(y_vals)
                 if y_vals_all:
                     y_min = float(np.min(y_vals_all) * 1.2)
                     y_max = float(np.max(y_vals_all) * 1.2)
+                    if y_max > 1e6:
+                        y_max = min(y_max, 1e6)
+                        st.warning("Y Max capped at 1,000,000 to prevent extreme scaling.")
                     if y_min == y_max:
                         y_min -= 1
                         y_max += 1
                 else:
                     y_min, y_max = 0, 31000
-                    st.warning("Auto-scale failed: No valid y-values. Using default range [0, 31000].")
+                    st.warning("Auto-scale failed: No valid y-values. Using default range [0, 31,000].")
             figs, skipped_curves = plot_graphs(
                 data_ref, use_colorful, num_colors if use_colorful else 1, bg_color, legend_loc, custom_legends,
                 show_grid, grid_major_x, grid_minor_x, grid_major_y, grid_minor_y,
@@ -126,7 +131,7 @@ if st.button("Generate Plot(s)"):
             debug_data = [
                 {
                     "Name": entry['name'],
-                    "Coefficients": [entry['coefficients'][k] for k in ['a', 'b', 'c', 'd', 'e', 'f']]
+                    "Coefficients": entry['coefficients']
                 } for entry in data_ref
             ]
             st.dataframe(pd.DataFrame(debug_data))
@@ -142,8 +147,7 @@ if st.button("Generate Plot(s)"):
             for entry in data_ref:
                 coeffs = entry['coefficients']
                 x_samples = np.linspace(x_min, x_max, 10)
-                y_samples = np.array([coeffs['a']*x**5 + coeffs['b']*x**4 + coeffs['c']*x**3 + 
-                                    coeffs['d']*x**2 + coeffs['e']*x + coeffs['f'] for x in x_samples])
+                y_samples = np.polyval(coeffs, x_samples)
                 y_finite = y_samples[np.isfinite(y_samples)]
                 min_y = float(np.min(y_finite)) if len(y_finite) > 0 else None
                 max_y = float(np.max(y_finite)) if len(y_finite) > 0 else None
@@ -182,21 +186,23 @@ if st.button("Generate Plot(s)"):
                 y_vals_all = []
                 for entry in data_ref:
                     coeffs = entry['coefficients']
-                    x_vals = np.linspace(x_min, x_max, 100)
-                    y_vals = np.array([coeffs['a']*x**5 + coeffs['b']*x**4 + coeffs['c']*x**3 + 
-                                     coeffs['d']*x**2 + coeffs['e']*x + coeffs['f'] for x in x_vals])
+                    x_vals = np.linspace(x_min, x_max, 1000)  # Increased resolution
+                    y_vals = np.polyval(coeffs, x_vals)
                     y_vals = y_vals[np.isfinite(y_vals)]
                     if len(y_vals) > 0:
                         y_vals_all.extend(y_vals)
                 if y_vals_all:
                     y_min = float(np.min(y_vals_all) * 1.2)
                     y_max = float(np.max(y_vals_all) * 1.2)
+                    if y_max > 1e6:
+                        y_max = min(y_max, 1e6)
+                        st.warning("Y Max capped at 1,000,000 to prevent extreme scaling.")
                     if y_min == y_max:
                         y_min -= 1
                         y_max += 1
                 else:
                     y_min, y_max = 0, 31000
-                    st.warning("Auto-scale failed: No valid y-values. Using default range [0, 31000].")
+                    st.warning("Auto-scale failed: No valid y-values. Using default range [0, 31,000].")
             figs = plot_graphs(
                 data_ref, use_colorful, num_colors if use_colorful else 1, bg_color, legend_loc, custom_legends,
                 show_grid, grid_major_x, grid_minor_x, grid_major_y, grid_minor_y,
@@ -208,8 +214,8 @@ if st.button("Generate Plot(s)"):
             st.error("No plots generated. Enable debug mode to diagnose issues.")
             st.stop()
 
-        if plot_grouping == "All in One" and len(data_ref) > 15:
-            st.warning("More than 15 curves in one plot may be cluttered. Consider 'One per Curve'.")
+        if plot_grouping == "All in One" and len(data_ref) > 30:
+            st.warning("More than 30 curves in one plot may be cluttered. Consider 'One per Curve'.")
 
         for i, (fig, curve_name) in enumerate(figs):
             st.subheader(f"Plot {i+1}" + (f": {curve_name}" if plot_grouping == "One per Curve" else ""))
