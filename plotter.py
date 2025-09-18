@@ -39,6 +39,10 @@ def plot_graphs(data_ref, use_colorful, num_colors, bg_color, legend_loc, custom
             else:
                 custom_label_map[line.strip()] = line.strip()
 
+    # Check if axes should be centered at (0,0)
+    center_x = x_min < 0 < x_max
+    center_y = y_min < 0 < y_max
+
     if plot_grouping == "All in One":
         # Single plot
         fig, ax = plt.subplots(figsize=(10, 6), dpi=300)
@@ -51,7 +55,7 @@ def plot_graphs(data_ref, use_colorful, num_colors, bg_color, legend_loc, custom
             name = entry['name']
             coeffs = entry['coefficients']
 
-            p1_full = np.linspace(x_min, x_max, 1000)  # Increased resolution
+            p1_full = np.linspace(x_min, x_max, 1000)
             try:
                 y_vals = np.polyval(coeffs, p1_full)
             except Exception as e:
@@ -123,6 +127,24 @@ def plot_graphs(data_ref, use_colorful, num_colors, bg_color, legend_loc, custom
         ax.set_ylim(y_min, y_max)
         ax.invert_yaxis()
 
+        # Center spines at (0,0) if ranges include negative and positive values
+        if center_x and center_y:
+            ax.spines['left'].set_position('zero')
+            ax.spines['bottom'].set_position('zero')
+            ax.spines['right'].set_color('none')
+            ax.spines['top'].set_color('none')
+            # Adjust tick positions based on x_pos, y_pos
+            ax.xaxis.set_ticks_position('bottom' if x_pos.lower() == 'bottom' else 'top')
+            ax.yaxis.set_ticks_position('left' if y_pos.lower() == 'left' else 'right')
+            ax.xaxis.set_label_position(x_pos.lower())
+            ax.yaxis.set_label_position(y_pos.lower())
+        else:
+            # Default spine positions
+            ax.xaxis.set_label_position(x_pos.lower())
+            ax.xaxis.set_ticks_position(x_pos.lower())
+            ax.yaxis.set_label_position(y_pos.lower())
+            ax.yaxis.set_ticks_position(y_pos.lower())
+
         # Grid
         if show_grid:
             grid_color = '#D3D3D3' if use_colorful else 'black'
@@ -138,12 +160,6 @@ def plot_graphs(data_ref, use_colorful, num_colors, bg_color, legend_loc, custom
         ax.xaxis.set_minor_locator(plt.MultipleLocator(x_minor_int))
         ax.yaxis.set_major_locator(plt.MultipleLocator(y_major_int))
         ax.yaxis.set_minor_locator(plt.MultipleLocator(y_minor_int))
-
-        # Positions
-        ax.xaxis.set_label_position(x_pos.lower())
-        ax.xaxis.set_ticks_position(x_pos.lower())
-        ax.yaxis.set_label_position(y_pos.lower())
-        ax.yaxis.set_ticks_position(y_pos.lower())
 
         # Legend
         bbox = (1.05, 0.5) if 'left' in matplotlib_loc or 'right' in matplotlib_loc else None
@@ -164,7 +180,7 @@ def plot_graphs(data_ref, use_colorful, num_colors, bg_color, legend_loc, custom
             fig.patch.set_facecolor(bg_color)
             ax.set_facecolor(bg_color)
 
-            p1_full = np.linspace(x_min, x_max, 1000)  # Increased resolution
+            p1_full = np.linspace(x_min, x_max, 1000)
             try:
                 y_vals = np.polyval(coeffs, p1_full)
             except Exception as e:
@@ -224,6 +240,22 @@ def plot_graphs(data_ref, use_colorful, num_colors, bg_color, legend_loc, custom
             ax.set_ylim(y_min, y_max)
             ax.invert_yaxis()
 
+            # Center spines at (0,0) if ranges include negative and positive values
+            if center_x and center_y:
+                ax.spines['left'].set_position('zero')
+                ax.spines['bottom'].set_position('zero')
+                ax.spines['right'].set_color('none')
+                ax.spines['top'].set_color('none')
+                ax.xaxis.set_ticks_position('bottom' if x_pos.lower() == 'bottom' else 'top')
+                ax.yaxis.set_ticks_position('left' if y_pos.lower() == 'left' else 'right')
+                ax.xaxis.set_label_position(x_pos.lower())
+                ax.yaxis.set_label_position(y_pos.lower())
+            else:
+                ax.xaxis.set_label_position(x_pos.lower())
+                ax.xaxis.set_ticks_position(x_pos.lower())
+                ax.yaxis.set_label_position(y_pos.lower())
+                ax.yaxis.set_ticks_position(y_pos.lower())
+
             # Grid
             if show_grid:
                 grid_color = '#D3D3D3' if use_colorful else 'black'
@@ -239,12 +271,6 @@ def plot_graphs(data_ref, use_colorful, num_colors, bg_color, legend_loc, custom
             ax.xaxis.set_minor_locator(plt.MultipleLocator(x_minor_int))
             ax.yaxis.set_major_locator(plt.MultipleLocator(y_major_int))
             ax.yaxis.set_minor_locator(plt.MultipleLocator(y_minor_int))
-
-            # Positions
-            ax.xaxis.set_label_position(x_pos.lower())
-            ax.xaxis.set_ticks_position(x_pos.lower())
-            ax.yaxis.set_label_position(y_pos.lower())
-            ax.yaxis.set_ticks_position(y_pos.lower())
 
             # Legend
             bbox = (1.05, 0.5) if 'left' in matplotlib_loc or 'right' in matplotlib_loc else None
