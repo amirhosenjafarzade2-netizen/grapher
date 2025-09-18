@@ -122,10 +122,7 @@ with col_upload1:
     - Column B+: Coefficients (highest degree first)
     - Maximum polynomial degree: 10
     - Handles any range automatically (from -10000 to 10000 and beyond)
-    
-    **Example:**
-Curve1 | 1.0 | 0.0 | -2.0 | 0.0 Curve2 | 0.5 | 1.0 | 0.0 | 3.0
-""")
+    """)
     uploaded_file = st.file_uploader(
         "Choose Excel file", 
         type=['xlsx', 'xls'], 
