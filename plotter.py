@@ -11,7 +11,7 @@ DEFAULT_COLORS = [
 def plot_graphs(data_ref, use_colorful, num_colors, bg_color, legend_loc, custom_legends, show_grid, 
                 grid_major_x, grid_minor_x, grid_major_y, grid_minor_y, x_min, x_max, y_min, y_max, 
                 x_pos, y_pos, x_major_int, x_minor_int, y_major_int, y_minor_int, 
-                title, x_label, y_label, plot_grouping, debug=False):
+                title, x_label, y_label, plot_grouping, auto_scale_y, debug=False):
     figs = []
     colors = DEFAULT_COLORS[:num_colors] if use_colorful else ['black'] * len(DEFAULT_COLORS)
     skipped_curves = []
@@ -54,19 +54,31 @@ def plot_graphs(data_ref, use_colorful, num_colors, bg_color, legend_loc, custom
                 try:
                     return (coeffs['a'] * x**5 + coeffs['b'] * x**4 + coeffs['c'] * x**3 +
                             coeffs['d'] * x**2 + coeffs['e'] * x + coeffs['f'])
-                except Exception:
+                except Exception as e:
+                    skipped_curves.append(f"Curve {name}: Polynomial evaluation failed ({str(e)})")
                     return np.nan
 
             p1_full = np.linspace(x_min, x_max, 100)
-            p_plot = []
-            y_plot = []
-            for p in p1_full:
-                y = polynomial(p, coeffs)
-                if np.isfinite(y) and y_min <= y <= y_max:
-                    p_plot.append(p)
-                    y_plot.append(y)
-                elif y > y_max and not auto_scale_y:
-                    break
+            y_vals = np.array([polynomial(p, coeffs) for p in p1_full])
+            if np.all(np.isnan(y_vals)):
+                skipped_curves.append(f"Curve {name}: No valid polynomial output")
+                continue
+
+            if not auto_scale_y:
+                valid = (np.isfinite(y_vals)) & (y_vals >= y_min) & (y_vals <= y_max)
+                p_plot = p1_full[valid]
+                y_plot = y_vals[valid]
+                if len(p_plot) > 0 and np.any(y_vals[~valid] > y_max):
+                    # Find first index where y > y_max
+                    exceed_idx = np.where((np.isfinite(y_vals)) & (y_vals > y_max))[0]
+                    if len(exceed_idx) > 0:
+                        valid[:exceed_idx[0]] = True
+                        p_plot = p1_full[valid]
+                        y_plot = y_vals[valid]
+            else:
+                valid = np.isfinite(y_vals)
+                p_plot = p1_full[valid]
+                y_plot = y_vals[valid]
 
             if len(p_plot) < 2:
                 skipped_curves.append(f"Curve {name}: Insufficient valid points ({len(p_plot)})")
@@ -77,7 +89,7 @@ def plot_graphs(data_ref, use_colorful, num_colors, bg_color, legend_loc, custom
 
             ax.plot(p_plot, y_plot, color=color, linewidth=2.5, label=label if use_colorful else None)
 
-            if not use_colorful and p_plot:
+            if not use_colorful and p_plot.size > 0:
                 end_x, end_y = p_plot[-1], y_plot[-1] - 300
                 overlap = False
                 for prev_x, prev_y in label_positions:
@@ -91,7 +103,7 @@ def plot_graphs(data_ref, use_colorful, num_colors, bg_color, legend_loc, custom
                 texts.append(text)
                 label_positions.append((end_x, end_y))
 
-        if not use_colorful:
+        if not use_colorful and texts:
             adjust_text(texts, ax=ax, only_move={'points': 'y', 'text': 'xy'})
 
         # Axis setup
@@ -125,9 +137,9 @@ def plot_graphs(data_ref, use_colorful, num_colors, bg_color, legend_loc, custom
 
         # Legend
         bbox = (1.05, 0.5) if 'left' in matplotlib_loc or 'right' in matplotlib_loc else None
-        if use_colorful:
+        if use_colorful and ax.get_legend_handles_labels()[0]:
             ax.legend(loc=matplotlib_loc, bbox_to_anchor=bbox, fontsize=8, frameon=True, edgecolor='black')
-        else:
+        elif not use_colorful and texts:
             ax.legend(['Custom Labels'], loc=matplotlib_loc, bbox_to_anchor=bbox, fontsize=8, frameon=True, edgecolor='black')
 
         ax.set_title(title)
@@ -146,19 +158,30 @@ def plot_graphs(data_ref, use_colorful, num_colors, bg_color, legend_loc, custom
                 try:
                     return (coeffs['a'] * x**5 + coeffs['b'] * x**4 + coeffs['c'] * x**3 +
                             coeffs['d'] * x**2 + coeffs['e'] * x + coeffs['f'])
-                except Exception:
+                except Exception as e:
+                    skipped_curves.append(f"Curve {name}: Polynomial evaluation failed ({str(e)})")
                     return np.nan
 
             p1_full = np.linspace(x_min, x_max, 100)
-            p_plot = []
-            y_plot = []
-            for p in p1_full:
-                y = polynomial(p, coeffs)
-                if np.isfinite(y) and y_min <= y <= y_max:
-                    p_plot.append(p)
-                    y_plot.append(y)
-                elif y > y_max and not auto_scale_y:
-                    break
+            y_vals = np.array([polynomial(p, coeffs) for p in p1_full])
+            if np.all(np.isnan(y_vals)):
+                skipped_curves.append(f"Curve {name}: No valid polynomial output")
+                continue
+
+            if not auto_scale_y:
+                valid = (np.isfinite(y_vals)) & (y_vals >= y_min) & (y_vals <= y_max)
+                p_plot = p1_full[valid]
+                y_plot = y_vals[valid]
+                if len(p_plot) > 0 and np.any(y_vals[~valid] > y_max):
+                    exceed_idx = np.where((np.isfinite(y_vals)) & (y_vals > y_max))[0]
+                    if len(exceed_idx) > 0:
+                        valid[:exceed_idx[0]] = True
+                        p_plot = p1_full[valid]
+                        y_plot = y_vals[valid]
+            else:
+                valid = np.isfinite(y_vals)
+                p_plot = p1_full[valid]
+                y_plot = y_vals[valid]
 
             if len(p_plot) < 2:
                 skipped_curves.append(f"Curve {name}: Insufficient valid points ({len(p_plot)})")
@@ -169,7 +192,7 @@ def plot_graphs(data_ref, use_colorful, num_colors, bg_color, legend_loc, custom
 
             ax.plot(p_plot, y_plot, color=color, linewidth=2.5, label=label if use_colorful else None)
 
-            if not use_colorful and p_plot:
+            if not use_colorful and p_plot.size > 0:
                 end_x, end_y = p_plot[-1], y_plot[-1] - 300
                 text = ax.text(end_x, end_y, label, fontsize=8, ha='left', va='center')
                 adjust_text([text], ax=ax, only_move={'points': 'y', 'text': 'xy'})
@@ -207,7 +230,7 @@ def plot_graphs(data_ref, use_colorful, num_colors, bg_color, legend_loc, custom
             bbox = (1.05, 0.5) if 'left' in matplotlib_loc or 'right' in matplotlib_loc else None
             if use_colorful:
                 ax.legend(loc=matplotlib_loc, bbox_to_anchor=bbox, fontsize=8, frameon=True, edgecolor='black')
-            else:
+            elif p_plot.size > 0:
                 ax.legend(['Custom Label'], loc=matplotlib_loc, bbox_to_anchor=bbox, fontsize=8, frameon=True, edgecolor='black')
 
             ax.set_title(f"{title} - {name}")
