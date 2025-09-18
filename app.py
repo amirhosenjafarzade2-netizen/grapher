@@ -69,6 +69,8 @@ with col_style1:
     use_colorful = color_mode == "Colorful"
     if use_colorful:
         num_colors = st.number_input("Number of Distinct Colors", min_value=5, max_value=50, value=35)
+    else:
+        num_colors = 1  # Default for black and white
     bg_color = st.color_picker("Background Color", value='#F5F5F5' if use_colorful else '#FFFFFF')
 with col_style2:
     legend_loc = st.selectbox("Legend Placement", ["Upper Right", "Upper Left", "Lower Right", "Lower Left", "Center Left"], index=4)
@@ -98,6 +100,7 @@ st.header("Axis Positions")
 col_axis1, col_axis2 = st.columns(2)
 with col_axis1:
     x_pos = st.radio("X Axis Position", ["Top", "Bottom"], index=0)
+with col_axis2:
     y_pos = st.radio("Y Axis Position", ["Left", "Right"], index=0)
 
 # Titles and Labels
@@ -110,37 +113,88 @@ y_label = st.text_input("Y Label", value="Depth, ft")
 if st.button("Generate Plot(s)"):
     plt.close('all')  # Clear figure cache
     with st.spinner("Loading data and generating plot(s)..."):
+        # Load data
         if debug:
             data_ref, skipped_rows = load_reference_data(uploaded_file, debug=True)
-            if auto_scale_y:
-                y_vals_all = []
-                for entry in data_ref:
-                    coeffs = entry['coefficients']
-                    x_vals = np.linspace(x_min, x_max, 1000)
-                    y_vals = np.polyval(coeffs, x_vals)
-                    y_vals = y_vals[np.isfinite(y_vals)]
-                    if len(y_vals) > 0:
-                        y_vals_all.extend(y_vals)
-                if y_vals_all:
-                    y_min = float(np.min(y_vals_all) * 1.2)
-                    y_max = float(np.max(y_vals_all) * 1.2)
-                    if y_max > 1e6:
-                        y_max = min(y_max, 1e6)
-                        st.warning("Y Max capped at 1,000,000 to prevent extreme scaling.")
-                    if y_min == y_max:
-                        y_min -= 1
-                        y_max += 1
-                else:
-                    y_min, y_max = 0, 1000
-                    st.warning("Auto-scale failed: No valid y-values. Using default range [0, 1000].")
-            figs, skipped_curves = plot_graphs(
-                data_ref, use_colorful, num_colors if use_colorful else 1, bg_color, legend_loc, custom_legends,
-                show_grid, grid_major_x, grid_minor_x, grid_major_y, grid_minor_y,
-                x_min, x_max, y_min, y_max, x_pos, y_pos,
-                x_major_int, x_minor_int, y_major_int, y_minor_int,
-                title, x_label, y_label, plot_grouping, auto_scale_y, stop_y_exit, stop_x_exit, debug=True)
-            
-            # Debug info
+        else:
+            data_ref = load_reference_data(uploaded_file)
+            skipped_rows = []
+
+        if not data_ref:
+            st.error("No valid data loaded from Excel. Please check file format.")
+            st.stop()
+
+        # Handle auto-scaling in the app to ensure consistency
+        if auto_scale_y:
+            y_vals_all = []
+            for entry in data_ref:
+                coeffs = entry['coefficients']
+                x_vals = np.linspace(x_min, x_max, 1000)
+                y_vals = np.polyval(coeffs, x_vals)
+                y_vals = y_vals[np.isfinite(y_vals)]
+                if len(y_vals) > 0:
+                    y_vals_all.extend(y_vals)
+            if y_vals_all:
+                y_min = float(np.min(y_vals_all) * 1.2)
+                y_max = float(np.max(y_vals_all) * 1.2)
+                if y_max > 1e6:
+                    y_max = min(y_max, 1e6)
+                    st.warning("Y Max capped at 1,000,000 to prevent extreme scaling.")
+                if y_min == y_max:
+                    y_min -= 1
+                    y_max += 1
+            else:
+                y_min, y_max = 0, 1000
+                st.warning("Auto-scale failed: No valid y-values. Using default range [0, 1000].")
+
+        # Generate plots
+        result = plot_graphs(
+            data_ref=data_ref,
+            use_colorful=use_colorful,
+            num_colors=num_colors,
+            bg_color=bg_color,
+            legend_loc=legend_loc,
+            custom_legends=custom_legends,
+            show_grid=show_grid,
+            grid_major_x=grid_major_x,
+            grid_minor_x=grid_minor_x,
+            grid_major_y=grid_major_y,
+            grid_minor_y=grid_minor_y,
+            x_min=x_min,
+            x_max=x_max,
+            y_min=y_min,
+            y_max=y_max,
+            x_pos=x_pos,
+            y_pos=y_pos,
+            x_major_int=x_major_int,
+            x_minor_int=x_minor_int,
+            y_major_int=y_major_int,
+            y_minor_int=y_minor_int,
+            title=title,
+            x_label=x_label,
+            y_label=y_label,
+            plot_grouping=plot_grouping,
+            auto_scale_y=auto_scale_y,
+            stop_y_exit=stop_y_exit,
+            stop_x_exit=stop_x_exit,
+            debug=debug,
+            invert_y_axis=False,  # Disable y-axis inversion to ensure curves appear
+            figsize=(10, 6),
+            dpi=300
+        )
+
+        # Handle debug vs non-debug return values
+        if debug:
+            figs, skipped_curves = result
+        else:
+            figs, skipped_curves = result, []
+
+        if not figs:
+            st.error("No plots generated. Enable debug mode to diagnose issues.")
+            st.stop()
+
+        # Debug Information
+        if debug:
             st.header("Debug Information")
             st.subheader("Loaded Data")
             debug_data = [
@@ -188,51 +242,22 @@ if st.button("Generate Plot(s)"):
                 ax_debug.set_ylabel(y_label)
                 ax_debug.set_xlim(x_min, x_max)
                 ax_debug.set_ylim(y_min, y_max)
-                ax_debug.invert_yaxis()
+                if x_min < 0 < x_max and y_min < 0 < y_max:
+                    ax_debug.spines['left'].set_position('zero')
+                    ax_debug.spines['bottom'].set_position('zero')
+                    ax_debug.spines['right'].set_color('none')
+                    ax_debug.spines['top'].set_color('none')
+                    ax_debug.xaxis.set_ticks_position('bottom' if x_pos.lower() == 'bottom' else 'top')
+                    ax_debug.yaxis.set_ticks_position('left' if y_pos.lower() == 'left' else 'right')
                 ax_debug.legend()
                 ax_debug.set_title("Debug: Sample Points")
                 st.pyplot(fig_debug)
                 plt.close(fig_debug)
-        else:
-            data_ref = load_reference_data(uploaded_file)
-            if not data_ref:
-                st.error("No valid data loaded from Excel. Please check file format.")
-                st.stop()
-            if auto_scale_y:
-                y_vals_all = []
-                for entry in data_ref:
-                    coeffs = entry['coefficients']
-                    x_vals = np.linspace(x_min, x_max, 1000)
-                    y_vals = np.polyval(coeffs, x_vals)
-                    y_vals = y_vals[np.isfinite(y_vals)]
-                    if len(y_vals) > 0:
-                        y_vals_all.extend(y_vals)
-                if y_vals_all:
-                    y_min = float(np.min(y_vals_all) * 1.2)
-                    y_max = float(np.max(y_vals_all) * 1.2)
-                    if y_max > 1e6:
-                        y_max = min(y_max, 1e6)
-                        st.warning("Y Max capped at 1,000,000 to prevent extreme scaling.")
-                    if y_min == y_max:
-                        y_min -= 1
-                        y_max += 1
-                else:
-                    y_min, y_max = 0, 1000
-                    st.warning("Auto-scale failed: No valid y-values. Using default range [0, 1000].")
-            figs = plot_graphs(
-                data_ref, use_colorful, num_colors if use_colorful else 1, bg_color, legend_loc, custom_legends,
-                show_grid, grid_major_x, grid_minor_x, grid_major_y, grid_minor_y,
-                x_min, x_max, y_min, y_max, x_pos, y_pos,
-                x_major_int, x_minor_int, y_major_int, y_minor_int,
-                title, x_label, y_label, plot_grouping, auto_scale_y, stop_y_exit, stop_x_exit)
 
-        if not figs:
-            st.error("No plots generated. Enable debug mode to diagnose issues.")
-            st.stop()
-
+        # Display plots
         if plot_grouping == "All in One" and len(data_ref) > 35:
             st.warning("More than 35 curves in one plot may be cluttered. Consider 'One per Curve'.")
-
+        
         for i, (fig, curve_name) in enumerate(figs):
             st.subheader(f"Plot {i+1}" + (f": {curve_name}" if plot_grouping == "One per Curve" else ""))
             st.pyplot(fig)
