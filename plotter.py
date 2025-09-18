@@ -12,7 +12,7 @@ DEFAULT_COLORS = [
 def plot_graphs(data_ref, use_colorful, num_colors, bg_color, legend_loc, custom_legends, show_grid, 
                 grid_major_x, grid_minor_x, grid_major_y, grid_minor_y, x_min, x_max, y_min, y_max, 
                 x_pos, y_pos, x_major_int, x_minor_int, y_major_int, y_minor_int, 
-                title, x_label, y_label, plot_grouping, auto_scale_y, debug=False):
+                title, x_label, y_label, plot_grouping, auto_scale_y, stop_y_exit, stop_x_exit, debug=False):
     figs = []
     colors = DEFAULT_COLORS[:num_colors] if use_colorful else ['black'] * len(DEFAULT_COLORS)
     skipped_curves = []
@@ -62,22 +62,33 @@ def plot_graphs(data_ref, use_colorful, num_colors, bg_color, legend_loc, custom
                 skipped_curves.append(f"Curve {name}: No valid polynomial output")
                 continue
 
+            # Apply x and y limits
+            valid = np.isfinite(y_vals)
             if not auto_scale_y:
-                valid = (np.isfinite(y_vals)) & (y_vals >= y_min) & (y_vals <= y_max)
-                p_plot = p1_full[valid]
-                y_plot = y_vals[valid]
-                if len(p_plot) > 0 and np.any(y_vals[~valid] > y_max):
-                    exceed_idx = np.where((np.isfinite(y_vals)) & (y_vals > y_max))[0]
-                    if len(exceed_idx) > 0:
-                        valid[:exceed_idx[0]] = True
-                        p_plot = p1_full[valid]
-                        y_plot = y_vals[valid]
-                        if debug:
-                            skipped_curves.append(f"Curve {name}: Stopped at x={p1_full[exceed_idx[0]]:.2f}, y={y_vals[exceed_idx[0]]:.2f} (exceeds y_max={y_max})")
-            else:
-                valid = np.isfinite(y_vals)
-                p_plot = p1_full[valid]
-                y_plot = y_vals[valid]
+                valid = valid & (y_vals >= y_min) & (y_vals <= y_max)
+            valid = valid & (p1_full >= x_min) & (p1_full <= x_max)
+
+            p_plot = p1_full[valid]
+            y_plot = y_vals[valid]
+
+            # Stop at first exit if specified
+            if stop_y_exit and not auto_scale_y and len(p_plot) > 0:
+                y_exit_idx = np.where((np.isfinite(y_vals)) & ((y_vals < y_min) | (y_vals > y_max)))[0]
+                if len(y_exit_idx) > 0:
+                    valid[y_exit_idx[0]:] = False
+                    p_plot = p1_full[valid]
+                    y_plot = y_vals[valid]
+                    if debug and len(y_exit_idx) > 0:
+                        skipped_curves.append(f"Curve {name}: Stopped at x={p1_full[y_exit_idx[0]]:.2f}, y={y_vals[y_exit_idx[0]]:.2f} (exceeds y_min={y_min} or y_max={y_max})")
+
+            if stop_x_exit and len(p_plot) > 0:
+                x_exit_idx = np.where((p1_full < x_min) | (p1_full > x_max))[0]
+                if len(x_exit_idx) > 0:
+                    valid[x_exit_idx[0]:] = False
+                    p_plot = p1_full[valid]
+                    y_plot = y_vals[valid]
+                    if debug and len(x_exit_idx) > 0:
+                        skipped_curves.append(f"Curve {name}: Stopped at x={p1_full[x_exit_idx[0]]:.2f}, y={y_vals[x_exit_idx[0]]:.2f} (exceeds x_min={x_min} or x_max={x_max})")
 
             if len(p_plot) < 2:
                 skipped_curves.append(f"Curve {name}: Insufficient valid points ({len(p_plot)})")
@@ -164,22 +175,33 @@ def plot_graphs(data_ref, use_colorful, num_colors, bg_color, legend_loc, custom
                 skipped_curves.append(f"Curve {name}: No valid polynomial output")
                 continue
 
+            # Apply x and y limits
+            valid = np.isfinite(y_vals)
             if not auto_scale_y:
-                valid = (np.isfinite(y_vals)) & (y_vals >= y_min) & (y_vals <= y_max)
-                p_plot = p1_full[valid]
-                y_plot = y_vals[valid]
-                if len(p_plot) > 0 and np.any(y_vals[~valid] > y_max):
-                    exceed_idx = np.where((np.isfinite(y_vals)) & (y_vals > y_max))[0]
-                    if len(exceed_idx) > 0:
-                        valid[:exceed_idx[0]] = True
-                        p_plot = p1_full[valid]
-                        y_plot = y_vals[valid]
-                        if debug:
-                            skipped_curves.append(f"Curve {name}: Stopped at x={p1_full[exceed_idx[0]]:.2f}, y={y_vals[exceed_idx[0]]:.2f} (exceeds y_max={y_max})")
-            else:
-                valid = np.isfinite(y_vals)
-                p_plot = p1_full[valid]
-                y_plot = y_vals[valid]
+                valid = valid & (y_vals >= y_min) & (y_vals <= y_max)
+            valid = valid & (p1_full >= x_min) & (p1_full <= x_max)
+
+            p_plot = p1_full[valid]
+            y_plot = y_vals[valid]
+
+            # Stop at first exit if specified
+            if stop_y_exit and not auto_scale_y and len(p_plot) > 0:
+                y_exit_idx = np.where((np.isfinite(y_vals)) & ((y_vals < y_min) | (y_vals > y_max)))[0]
+                if len(y_exit_idx) > 0:
+                    valid[y_exit_idx[0]:] = False
+                    p_plot = p1_full[valid]
+                    y_plot = y_vals[valid]
+                    if debug and len(y_exit_idx) > 0:
+                        skipped_curves.append(f"Curve {name}: Stopped at x={p1_full[y_exit_idx[0]]:.2f}, y={y_vals[y_exit_idx[0]]:.2f} (exceeds y_min={y_min} or y_max={y_max})")
+
+            if stop_x_exit and len(p_plot) > 0:
+                x_exit_idx = np.where((p1_full < x_min) | (p1_full > x_max))[0]
+                if len(x_exit_idx) > 0:
+                    valid[x_exit_idx[0]:] = False
+                    p_plot = p1_full[valid]
+                    y_plot = y_vals[valid]
+                    if debug and len(x_exit_idx) > 0:
+                        skipped_curves.append(f"Curve {name}: Stopped at x={p1_full[x_exit_idx[0]]:.2f}, y={y_vals[x_exit_idx[0]]:.2f} (exceeds x_min={x_min} or x_max={x_max})")
 
             if len(p_plot) < 2:
                 skipped_curves.append(f"Curve {name}: Insufficient valid points ({len(p_plot)})")
