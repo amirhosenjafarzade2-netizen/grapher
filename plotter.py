@@ -3,9 +3,10 @@ import numpy as np
 from adjustText import adjust_text
 
 DEFAULT_COLORS = [
-    '#1f77b4', '#ff7f0e', '#2ca02c', '#d62728', '#9467bd',
-    '#8c564b', '#e377c2', '#7f7f7f', '#bcbd22', '#17becf',
-    '#aec7e8', '#ffbb78', '#98df8a', '#ff9896', '#c5b0d5'
+    '#1f77b4', '#ff7f0e', '#2ca02c', '#d62728', '#9467bd', '#8c564b', '#e377c2', '#7f7f7f', '#bcbd22', '#17becf',
+    '#aec7e8', '#ffbb78', '#98df8a', '#ff9896', '#c5b0d5', '#c49c94', '#f7b6d2', '#c7c7c7', '#dbdb8d', '#9edae5',
+    '#393b79', '#ad494a', '#8c6d31', '#d6616b', '#b5cf6b', '#7b4173', '#ce6dbd', '#637939', '#6b6ecf', '#d4b9da',
+    '#843c39', '#de9ed6', '#7b4f4b', '#a55194', '#ce1256'
 ]
 
 def plot_graphs(data_ref, use_colorful, num_colors, bg_color, legend_loc, custom_legends, show_grid, 
@@ -50,16 +51,13 @@ def plot_graphs(data_ref, use_colorful, num_colors, bg_color, legend_loc, custom
             name = entry['name']
             coeffs = entry['coefficients']
 
-            def polynomial(x, coeffs):
-                try:
-                    return (coeffs['a'] * x**5 + coeffs['b'] * x**4 + coeffs['c'] * x**3 +
-                            coeffs['d'] * x**2 + coeffs['e'] * x + coeffs['f'])
-                except Exception as e:
-                    skipped_curves.append(f"Curve {name}: Polynomial evaluation failed ({str(e)})")
-                    return np.nan
+            p1_full = np.linspace(x_min, x_max, 1000)  # Increased resolution
+            try:
+                y_vals = np.polyval(coeffs, p1_full)
+            except Exception as e:
+                skipped_curves.append(f"Curve {name}: Polynomial evaluation failed ({str(e)})")
+                continue
 
-            p1_full = np.linspace(x_min, x_max, 100)
-            y_vals = np.array([polynomial(p, coeffs) for p in p1_full])
             if np.all(np.isnan(y_vals)):
                 skipped_curves.append(f"Curve {name}: No valid polynomial output")
                 continue
@@ -69,12 +67,13 @@ def plot_graphs(data_ref, use_colorful, num_colors, bg_color, legend_loc, custom
                 p_plot = p1_full[valid]
                 y_plot = y_vals[valid]
                 if len(p_plot) > 0 and np.any(y_vals[~valid] > y_max):
-                    # Find first index where y > y_max
                     exceed_idx = np.where((np.isfinite(y_vals)) & (y_vals > y_max))[0]
                     if len(exceed_idx) > 0:
                         valid[:exceed_idx[0]] = True
                         p_plot = p1_full[valid]
                         y_plot = y_vals[valid]
+                        if debug:
+                            skipped_curves.append(f"Curve {name}: Stopped at x={p1_full[exceed_idx[0]]:.2f}, y={y_vals[exceed_idx[0]]:.2f} (exceeds y_max={y_max})")
             else:
                 valid = np.isfinite(y_vals)
                 p_plot = p1_full[valid]
@@ -154,16 +153,13 @@ def plot_graphs(data_ref, use_colorful, num_colors, bg_color, legend_loc, custom
             fig.patch.set_facecolor(bg_color)
             ax.set_facecolor(bg_color)
 
-            def polynomial(x, coeffs):
-                try:
-                    return (coeffs['a'] * x**5 + coeffs['b'] * x**4 + coeffs['c'] * x**3 +
-                            coeffs['d'] * x**2 + coeffs['e'] * x + coeffs['f'])
-                except Exception as e:
-                    skipped_curves.append(f"Curve {name}: Polynomial evaluation failed ({str(e)})")
-                    return np.nan
+            p1_full = np.linspace(x_min, x_max, 1000)  # Increased resolution
+            try:
+                y_vals = np.polyval(coeffs, p1_full)
+            except Exception as e:
+                skipped_curves.append(f"Curve {name}: Polynomial evaluation failed ({str(e)})")
+                continue
 
-            p1_full = np.linspace(x_min, x_max, 100)
-            y_vals = np.array([polynomial(p, coeffs) for p in p1_full])
             if np.all(np.isnan(y_vals)):
                 skipped_curves.append(f"Curve {name}: No valid polynomial output")
                 continue
@@ -178,6 +174,8 @@ def plot_graphs(data_ref, use_colorful, num_colors, bg_color, legend_loc, custom
                         valid[:exceed_idx[0]] = True
                         p_plot = p1_full[valid]
                         y_plot = y_vals[valid]
+                        if debug:
+                            skipped_curves.append(f"Curve {name}: Stopped at x={p1_full[exceed_idx[0]]:.2f}, y={y_vals[exceed_idx[0]]:.2f} (exceeds y_max={y_max})")
             else:
                 valid = np.isfinite(y_vals)
                 p_plot = p1_full[valid]
