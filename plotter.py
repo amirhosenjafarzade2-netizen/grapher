@@ -54,30 +54,30 @@ def plot_graphs(data_ref, use_colorful, num_colors, bg_color, legend_loc, custom
             name = entry['name']
             coeffs = entry['coefficients']
             degree = entry['degree']
+            scale_factor = entry.get('scale_factor', 1.0)
 
-            # Check for extreme coefficients
             if any(abs(c) > 1e10 for c in coeffs):
                 skipped_curves.append(f"Curve {name}: Coefficients too large (>1e10)")
                 continue
 
             if func_type == 'Polynomial':
-                def polynomial(x, coeffs):
+                def polynomial(x, coeffs, scale_factor):
                     try:
-                        return np.polyval(coeffs, x)
+                        return np.polyval(coeffs, x) * scale_factor
                     except Exception as e:
                         skipped_curves.append(f"Curve {name}: Polynomial evaluation failed ({str(e)})")
                         return np.full_like(x, np.nan)
-                # Normalize x to [-1, 1] for stability
                 x_scale = (x_max - x_min) / 2
                 x_shift = (x_max + x_min) / 2
                 p1_full_scaled = np.linspace(-1, 1.5 if allow_reentry_x else 1, 1000)
                 p1_full = p1_full_scaled * x_scale + x_shift
-                y_vals = polynomial(p1_full_scaled, coeffs)
+                y_vals = polynomial(p1_full_scaled, coeffs, scale_factor)
                 if np.all(np.isnan(y_vals)):
                     skipped_curves.append(f"Curve {name}: No valid polynomial output")
                     continue
 
-                if np.max(np.abs(y_vals[np.isfinite(y_vals)])) > 1e10:
+                y_finite = y_vals[np.isfinite(y_vals)]
+                if len(y_finite) > 0 and np.max(np.abs(y_finite)) > 1e10:
                     skipped_curves.append(f"Curve {name}: Extreme y-values detected (>1e10)")
                     continue
 
@@ -173,6 +173,7 @@ def plot_graphs(data_ref, use_colorful, num_colors, bg_color, legend_loc, custom
             name = entry['name']
             coeffs = entry['coefficients']
             degree = entry['degree']
+            scale_factor = entry.get('scale_factor', 1.0)
 
             if any(abs(c) > 1e10 for c in coeffs):
                 skipped_curves.append(f"Curve {name}: Coefficients too large (>1e10)")
@@ -183,9 +184,9 @@ def plot_graphs(data_ref, use_colorful, num_colors, bg_color, legend_loc, custom
             ax.set_facecolor(bg_color)
 
             if func_type == 'Polynomial':
-                def polynomial(x, coeffs):
+                def polynomial(x, coeffs, scale_factor):
                     try:
-                        return np.polyval(coeffs, x)
+                        return np.polyval(coeffs, x) * scale_factor
                     except Exception as e:
                         skipped_curves.append(f"Curve {name}: Polynomial evaluation failed ({str(e)})")
                         return np.full_like(x, np.nan)
@@ -193,12 +194,13 @@ def plot_graphs(data_ref, use_colorful, num_colors, bg_color, legend_loc, custom
                 x_shift = (x_max + x_min) / 2
                 p1_full_scaled = np.linspace(-1, 1.5 if allow_reentry_x else 1, 1000)
                 p1_full = p1_full_scaled * x_scale + x_shift
-                y_vals = polynomial(p1_full_scaled, coeffs)
+                y_vals = polynomial(p1_full_scaled, coeffs, scale_factor)
                 if np.all(np.isnan(y_vals)):
                     skipped_curves.append(f"Curve {name}: No valid polynomial output")
                     continue
 
-                if np.max(np.abs(y_vals[np.isfinite(y_vals)])) > 1e10:
+                y_finite = y_vals[np.isfinite(y_vals)]
+                if len(y_finite) > 0 and np.max(np.abs(y_finite)) > 1e10:
                     skipped_curves.append(f"Curve {name}: Extreme y-values detected (>1e10)")
                     continue
 
