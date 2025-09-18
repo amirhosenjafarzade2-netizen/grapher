@@ -6,45 +6,53 @@ from io import BytesIO
 import base64
 import numpy as np
 import pandas as pd
+import os
 
 st.set_page_config(layout="wide")
 st.title("General Curve Plotter")
 
 # Sample Excel Download
 st.header("Sample Data")
-with open("sample_data.xlsx", "rb") as file:
-    st.download_button(
-        label="Download Sample Excel",
-        data=file,
-        file_name="sample_data.xlsx",
-        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-    )
+if os.path.exists("sample_data.xlsx"):
+    with open("sample_data.xlsx", "rb") as file:
+        st.download_button(
+            label="Download Sample Excel",
+            data=file,
+            file_name="sample_data.xlsx",
+            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+        )
+else:
+    st.warning("Sample Excel file not found. Please ensure 'sample_data.xlsx' is in the app directory or upload your own data.")
 
 # Debug Toggle
 debug = st.checkbox("Enable Debug Mode (Show Data and Logs)", value=False)
 
-# Axis Ranges (first)
+# Axis Ranges
 st.header("Axis Ranges")
 col_range1, col_range2 = st.columns(2)
 with col_range1:
     x_min = st.number_input("X Min", value=0.0, help="Can be negative")
     x_max = st.number_input("X Max", value=4000.0)
 with col_range2:
-    y_min = st.number_input("Y Min", value=0.0, help="Can be negative")
-    y_max = st.number_input("Y Max", value=31000.0)
+    auto_scale_y = st.checkbox("Auto-Scale Y-Axis", value=False)
+    if not auto_scale_y:
+        y_min = st.number_input("Y Min", value=0.0, help="Can be negative")
+        y_max = st.number_input("Y Max", value=31000.0)
+    else:
+        y_min, y_max = 0.0, 1.0  # Will be computed later
 
 # Validate ranges
 if x_min >= x_max:
     st.error("X Max must be greater than X Min")
     st.stop()
-if y_min >= y_max:
+if not auto_scale_y and y_min >= y_max:
     st.error("Y Max must be greater than Y Min")
     st.stop()
 
 # Suggest intervals
 suggest_major_x = round((x_max - x_min) / 10, -int(np.log10((x_max - x_min)/10)) + 1) if x_max > x_min else 1000
 suggest_minor_x = suggest_major_x / 5
-suggest_major_y = round((y_max - y_min) / 10, -int(np.log10((y_max - y_min)/10)) + 1) if y_max > y_min else 1000
+suggest_major_y = 1000.0 if auto_scale_y else round((y_max - y_min) / 10, -int(np.log10((y_max - y_min)/10)) + 1) if y_max > y_min else 1000
 suggest_minor_y = suggest_major_y / 5
 
 # Data Upload
@@ -116,6 +124,24 @@ if st.button("Generate Plot(s)"):
     with st.spinner("Loading data and generating plot(s)..."):
         if debug:
             data_ref, skipped_rows = load_reference_data(uploaded_file, debug=True)
+            if auto_scale_y:
+                # Compute y_min, y_max across all curves
+                y_vals_all = []
+                for entry in data_ref:
+                    x_scaled = np.linspace(-1, 1, 100)
+                    y_vals = np.polyval(entry['coefficients'], x_scaled)
+                    y_vals = y_vals[np.isfinite(y_vals)]
+                    if len(y_vals) > 0:
+                        y_vals_all.extend(y_vals)
+                if y_vals_all:
+                    y_min = float(np.min(y_vals_all) * 1.1)
+                    y_max = float(np.max(y_vals_all) * 1.1)
+                    if y_min == y_max:
+                        y_min -= 1
+                        y_max += 1
+                else:
+                    y_min, y_max = -100, 100
+                    st.warning("Auto-scale failed: No valid y-values. Using default range [-100, 100].")
             figs, skipped_curves = plot_graphs(
                 data_ref, use_colorful, num_colors if use_colorful else 1, bg_color, legend_loc, custom_legends, 
                 scale_type, show_grid, grid_major_x if show_grid else suggest_major_x, grid_minor_x if show_grid else suggest_minor_x,
@@ -138,17 +164,43 @@ if st.button("Generate Plot(s)"):
             if skipped_curves:
                 st.subheader("Skipped Curves")
                 st.write("\n".join(skipped_curves))
-            # Sample points
+            # Sample points with min/max
             st.subheader("Sample Curve Points")
             sample_points = []
             for entry in data_ref:
                 x_samples = np.linspace(x_min, x_max, 5)
                 y_samples = np.polyval(entry['coefficients'], (x_samples - (x_max + x_min)/2) / ((x_max - x_min)/2))
+                y_finite = y_samples[np.isfinite(y_samples)]
+                min_y = float(np.min(y_finite)) if len(y_finite) > 0 else None
+                max_y = float(np.max(y_finite)) if len(y_finite) > 0 else None
                 for x, y in zip(x_samples, y_samples):
-                    sample_points.append({"Curve": entry['name'], "X": x, "Y": y})
+                    sample_points.append({
+                        "Curve": entry['name'], 
+                        "X": x, 
+                        "Y": y, 
+                        "Min Y (Curve)": min_y, 
+                        "Max Y (Curve)": max_y
+                    })
             st.dataframe(pd.DataFrame(sample_points))
         else:
             data_ref = load_reference_data(uploaded_file)
+            if auto_scale_y:
+                y_vals_all = []
+                for entry in data_ref:
+                    x_scaled = np.linspace(-1, 1, 100)
+                    y_vals = np.polyval(entry['coefficients'], x_scaled)
+                    y_vals = y_vals[np.isfinite(y_vals)]
+                    if len(y_vals) > 0:
+                        y_vals_all.extend(y_vals)
+                if y_vals_all:
+                    y_min = float(np.min(y_vals_all) * 1.1)
+                    y_max = float(np.max(y_vals_all) * 1.1)
+                    if y_min == y_max:
+                        y_min -= 1
+                        y_max += 1
+                else:
+                    y_min, y_max = -100, 100
+                    st.warning("Auto-scale failed: No valid y-values. Using default range [-100, 100].")
             figs = plot_graphs(
                 data_ref, use_colorful, num_colors if use_colorful else 1, bg_color, legend_loc, custom_legends, 
                 scale_type, show_grid, grid_major_x if show_grid else suggest_major_x, grid_minor_x if show_grid else suggest_minor_x,
