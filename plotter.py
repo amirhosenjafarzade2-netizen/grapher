@@ -13,9 +13,10 @@ DEFAULT_COLORS = [
 
 def plot_graphs(data_ref, use_colorful, num_colors, bg_color, legend_loc, custom_legends, scale_type, show_grid, grid_major_x, grid_minor_x,
                 grid_major_y, grid_minor_y, func_type, x_min, x_max, y_min, y_max, x_pos, y_pos, plot_frame,
-                x_major_int, x_minor_int, y_major_int, y_minor_int, allow_reentry_x, allow_reentry_y, title, x_label, y_label, plot_grouping):
+                x_major_int, x_minor_int, y_major_int, y_minor_int, allow_reentry_x, allow_reentry_y, title, x_label, y_label, plot_grouping, debug=False):
     figs = []
     colors = DEFAULT_COLORS[:num_colors] if use_colorful else ['black'] * len(DEFAULT_COLORS)
+    skipped_curves = []
 
     # Map user-friendly legend_loc to Matplotlib loc
     loc_map = {
@@ -43,7 +44,7 @@ def plot_graphs(data_ref, use_colorful, num_colors, bg_color, legend_loc, custom
 
     if plot_grouping == "All in One":
         # Single plot
-        fig, ax = plt.subplots(figsize=(10, 6), dpi=300)
+        fig, ax = plt.subplots(figsize=(12, 8), dpi=150)
         fig.patch.set_facecolor(bg_color)
         ax.set_facecolor(bg_color)
         label_positions = []
@@ -56,9 +57,25 @@ def plot_graphs(data_ref, use_colorful, num_colors, bg_color, legend_loc, custom
 
             if func_type == 'Polynomial':
                 def polynomial(x, coeffs):
-                    return np.polyval(coeffs, x)
-                p1_full = np.linspace(x_min, x_max * (1.5 if allow_reentry_x else 1.0), 200)
-                y_vals = polynomial(p1_full, coeffs)
+                    try:
+                        return np.polyval(coeffs, x)
+                    except Exception as e:
+                        skipped_curves.append(f"Curve {name}: Polynomial evaluation failed ({str(e)})")
+                        return np.full_like(x, np.nan)
+                # Normalize x to [-1, 1] for stability
+                x_scale = (x_max - x_min) / 2
+                x_shift = (x_max + x_min) / 2
+                p1_full_scaled = np.linspace(-1, 1.5 if allow_reentry_x else 1, 1000)
+                p1_full = p1_full_scaled * x_scale + x_shift
+                y_vals = polynomial(p1_full_scaled, coeffs)  # Evaluate in scaled space
+                if np.all(np.isnan(y_vals)):
+                    skipped_curves.append(f"Curve {name}: No valid polynomial output")
+                    continue
+
+                # Scale y if needed (optional, adjust based on testing)
+                if np.max(np.abs(y_vals)) > 1e10 or np.min(np.abs(y_vals)) < 1e-10:
+                    skipped_curves.append(f"Curve {name}: Extreme y-values detected")
+                    continue
 
                 segments = []
                 current_seg = []
@@ -77,6 +94,7 @@ def plot_graphs(data_ref, use_colorful, num_colors, bg_color, legend_loc, custom
                     segments.append(current_seg)
 
                 if not segments:
+                    skipped_curves.append(f"Curve {name}: No points in range [{x_min}, {x_max}] x [{y_min}, {y_max}]")
                     continue
 
                 color = custom_color_map.get(name, colors[i % len(colors)]) if use_colorful else 'black'
@@ -137,7 +155,7 @@ def plot_graphs(data_ref, use_colorful, num_colors, bg_color, legend_loc, custom
         # Legend
         bbox = (1.05, 0.5) if 'left' in matplotlib_loc or 'right' in matplotlib_loc else None
         if matplotlib_loc in ['upper center', 'lower center']:
-            bbox = None  # Inside plot for top/bottom
+            bbox = None
         if use_colorful:
             ax.legend(loc=matplotlib_loc, bbox_to_anchor=bbox, fontsize=8)
         else:
@@ -152,15 +170,29 @@ def plot_graphs(data_ref, use_colorful, num_colors, bg_color, legend_loc, custom
             coeffs = entry['coefficients']
             degree = entry['degree']
 
-            fig, ax = plt.subplots(figsize=(10, 6), dpi=300)
+            fig, ax = plt.subplots(figsize=(12, 8), dpi=150)
             fig.patch.set_facecolor(bg_color)
             ax.set_facecolor(bg_color)
 
             if func_type == 'Polynomial':
                 def polynomial(x, coeffs):
-                    return np.polyval(coeffs, x)
-                p1_full = np.linspace(x_min, x_max * (1.5 if allow_reentry_x else 1.0), 200)
-                y_vals = polynomial(p1_full, coeffs)
+                    try:
+                        return np.polyval(coeffs, x)
+                    except Exception as e:
+                        skipped_curves.append(f"Curve {name}: Polynomial evaluation failed ({str(e)})")
+                        return np.full_like(x, np.nan)
+                x_scale = (x_max - x_min) / 2
+                x_shift = (x_max + x_min) / 2
+                p1_full_scaled = np.linspace(-1, 1.5 if allow_reentry_x else 1, 1000)
+                p1_full = p1_full_scaled * x_scale + x_shift
+                y_vals = polynomial(p1_full_scaled, coeffs)
+                if np.all(np.isnan(y_vals)):
+                    skipped_curves.append(f"Curve {name}: No valid polynomial output")
+                    continue
+
+                if np.max(np.abs(y_vals)) > 1e10 or np.min(np.abs(y_vals)) < 1e-10:
+                    skipped_curves.append(f"Curve {name}: Extreme y-values detected")
+                    continue
 
                 segments = []
                 current_seg = []
@@ -179,6 +211,7 @@ def plot_graphs(data_ref, use_colorful, num_colors, bg_color, legend_loc, custom
                     segments.append(current_seg)
 
                 if not segments:
+                    skipped_curves.append(f"Curve {name}: No points in range [{x_min}, {x_max}] x [{y_min}, {y_max}]")
                     continue
 
                 color = custom_color_map.get(name, colors[0]) if use_colorful else 'black'
@@ -244,4 +277,6 @@ def plot_graphs(data_ref, use_colorful, num_colors, bg_color, legend_loc, custom
             ax.set_title(f"{title} - {name}")
             figs.append((fig, name))
 
+    if debug:
+        return figs, skipped_curves
     return figs
