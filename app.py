@@ -118,7 +118,7 @@ if st.button("Generate Plot(s)"):
                 show_grid, grid_major_x, grid_minor_x, grid_major_y, grid_minor_y,
                 x_min, x_max, y_min, y_max, x_pos, y_pos,
                 x_major_int, x_minor_int, y_major_int, y_minor_int,
-                title, x_label, y_label, plot_grouping, debug=True)
+                title, x_label, y_label, plot_grouping, auto_scale_y, debug=True)
             
             # Debug info
             st.header("Debug Information")
@@ -202,7 +202,7 @@ if st.button("Generate Plot(s)"):
                 show_grid, grid_major_x, grid_minor_x, grid_major_y, grid_minor_y,
                 x_min, x_max, y_min, y_max, x_pos, y_pos,
                 x_major_int, x_minor_int, y_major_int, y_minor_int,
-                title, x_label, y_label, plot_grouping)
+                title, x_label, y_label, plot_grouping, auto_scale_y)
 
         if not figs:
             st.error("No plots generated. Enable debug mode to diagnose issues.")
