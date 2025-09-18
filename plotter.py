@@ -5,7 +5,10 @@ from adjustText import adjust_text
 DEFAULT_COLORS = [
     '#1f77b4', '#ff7f0e', '#2ca02c', '#d62728', '#9467bd',
     '#8c564b', '#e377c2', '#7f7f7f', '#bcbd22', '#17becf',
-    '#aec7e8', '#ffbb78', '#98df8a', '#ff9896', '#c5b0d5'
+    '#aec7e8', '#ffbb78', '#98df8a', '#ff9896', '#c5b0d5',
+    '#1b9e77', '#d95f02', '#7570b3', '#e7298a', '#66a61e',
+    '#e6ab02', '#a6761d', '#666666', '#1a1a1a', '#b3cde3',
+    '#ccebc5', '#decbe4', '#fed9a6', '#ffffcc', '#b2df8a'
 ]
 
 def plot_graphs(data_ref, use_colorful, num_colors, bg_color, legend_loc, custom_legends, scale_type, show_grid, grid_major_x, grid_minor_x,
@@ -13,6 +16,18 @@ def plot_graphs(data_ref, use_colorful, num_colors, bg_color, legend_loc, custom
                 x_major_int, x_minor_int, y_major_int, y_minor_int, allow_reentry_x, allow_reentry_y, title, x_label, y_label, plot_grouping):
     figs = []
     colors = DEFAULT_COLORS[:num_colors] if use_colorful else ['black'] * len(DEFAULT_COLORS)
+
+    # Map user-friendly legend_loc to Matplotlib loc
+    loc_map = {
+        "Upper Right": "upper right",
+        "Upper Left": "upper left",
+        "Lower Right": "lower right",
+        "Lower Left": "lower left",
+        "Center Left": "center left",
+        "Center Top": "upper center",
+        "Center Bottom": "lower center"
+    }
+    matplotlib_loc = loc_map[legend_loc]
 
     # Parse custom legends
     custom_label_map = {}
@@ -120,11 +135,13 @@ def plot_graphs(data_ref, use_colorful, num_colors, bg_color, legend_loc, custom
             ax.spines['right'].set_visible(False)
 
         # Legend
-        bbox = (1.05, 0.5) if 'left' in legend_loc or 'right' in legend_loc else None
+        bbox = (1.05, 0.5) if 'left' in matplotlib_loc or 'right' in matplotlib_loc else None
+        if matplotlib_loc in ['upper center', 'lower center']:
+            bbox = None  # Inside plot for top/bottom
         if use_colorful:
-            ax.legend(loc=legend_loc, bbox_to_anchor=bbox, fontsize=8)
+            ax.legend(loc=matplotlib_loc, bbox_to_anchor=bbox, fontsize=8)
         else:
-            ax.legend(['Custom Labels'], loc=legend_loc, bbox_to_anchor=bbox, fontsize=8)
+            ax.legend(['Custom Labels'], loc=matplotlib_loc, bbox_to_anchor=bbox, fontsize=8)
 
         ax.set_title(title)
         figs.append((fig, "All Curves"))
@@ -216,11 +233,13 @@ def plot_graphs(data_ref, use_colorful, num_colors, bg_color, legend_loc, custom
                 ax.spines['right'].set_visible(False)
 
             # Legend
-            bbox = (1.05, 0.5) if 'left' in legend_loc or 'right' in legend_loc else None
+            bbox = (1.05, 0.5) if 'left' in matplotlib_loc or 'right' in matplotlib_loc else None
+            if matplotlib_loc in ['upper center', 'lower center']:
+                bbox = None
             if use_colorful:
-                ax.legend(loc=legend_loc, bbox_to_anchor=bbox, fontsize=8)
+                ax.legend(loc=matplotlib_loc, bbox_to_anchor=bbox, fontsize=8)
             else:
-                ax.legend(['Custom Label'], loc=legend_loc, bbox_to_anchor=bbox, fontsize=8)
+                ax.legend(['Custom Label'], loc=matplotlib_loc, bbox_to_anchor=bbox, fontsize=8)
 
             ax.set_title(f"{title} - {name}")
             figs.append((fig, name))
