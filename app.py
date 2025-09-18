@@ -6,23 +6,9 @@ from io import BytesIO
 import base64
 import numpy as np
 import pandas as pd
-import os
 
 st.set_page_config(layout="wide")
 st.title("General Curve Plotter")
-
-# Sample Excel Download
-st.header("Sample Data")
-if os.path.exists("sample_data.xlsx"):
-    with open("sample_data.xlsx", "rb") as file:
-        st.download_button(
-            label="Download Sample Excel",
-            data=file,
-            file_name="sample_data.xlsx",
-            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-        )
-else:
-    st.warning("Sample Excel file not found. Please ensure 'sample_data.xlsx' is in the app directory or upload your own data.")
 
 # Debug Toggle
 debug = st.checkbox("Enable Debug Mode (Show Data and Logs)", value=False)
@@ -34,7 +20,7 @@ with col_range1:
     x_min = st.number_input("X Min", value=0.0, help="Can be negative")
     x_max = st.number_input("X Max", value=4000.0)
 with col_range2:
-    auto_scale_y = st.checkbox("Auto-Scale Y-Axis", value=False)
+    auto_scale_y = st.checkbox("Auto-Scale Y-Axis", value=True)
     if not auto_scale_y:
         y_min = st.number_input("Y Min", value=0.0, help="Can be negative")
         y_max = st.number_input("Y Max", value=31000.0)
@@ -59,6 +45,9 @@ suggest_minor_y = suggest_major_y / 5
 st.header("Upload Excel Data")
 st.markdown("Excel format: col0 = curve name, col1+ = polynomial coefficients (high to low degree).")
 uploaded_file = st.file_uploader("Upload Excel", type=['xlsx'])
+if not uploaded_file and not debug:
+    st.warning("Please upload an Excel file to generate plots.")
+    st.stop()
 
 # Plot Style
 st.header("Plot Style")
@@ -129,13 +118,13 @@ if st.button("Generate Plot(s)"):
                 y_vals_all = []
                 for entry in data_ref:
                     x_scaled = np.linspace(-1, 1, 100)
-                    y_vals = np.polyval(entry['coefficients'], x_scaled)
+                    y_vals = np.polyval(entry['coefficients'], x_scaled) * entry.get('scale_factor', 1.0)
                     y_vals = y_vals[np.isfinite(y_vals)]
                     if len(y_vals) > 0:
                         y_vals_all.extend(y_vals)
                 if y_vals_all:
-                    y_min = float(np.min(y_vals_all) * 1.1)
-                    y_max = float(np.max(y_vals_all) * 1.1)
+                    y_min = float(np.min(y_vals_all) * 1.2)
+                    y_max = float(np.max(y_vals_all) * 1.2)
                     if y_min == y_max:
                         y_min -= 1
                         y_max += 1
@@ -154,7 +143,7 @@ if st.button("Generate Plot(s)"):
             st.header("Debug Information")
             st.subheader("Loaded Data")
             debug_data = [
-                {"Name": entry['name'], "Degree": entry['degree'], "Coefficients": entry['coefficients']}
+                {"Name": entry['name'], "Degree": entry['degree'], "Coefficients": entry['coefficients'], "Scale Factor": entry.get('scale_factor', 1.0)}
                 for entry in data_ref
             ]
             st.dataframe(pd.DataFrame(debug_data))
@@ -168,8 +157,8 @@ if st.button("Generate Plot(s)"):
             st.subheader("Sample Curve Points")
             sample_points = []
             for entry in data_ref:
-                x_samples = np.linspace(x_min, x_max, 5)
-                y_samples = np.polyval(entry['coefficients'], (x_samples - (x_max + x_min)/2) / ((x_max - x_min)/2))
+                x_samples = np.linspace(x_min, x_max, 10)
+                y_samples = np.polyval(entry['coefficients'], (x_samples - (x_max + x_min)/2) / ((x_max - x_min)/2)) * entry.get('scale_factor', 1.0)
                 y_finite = y_samples[np.isfinite(y_samples)]
                 min_y = float(np.min(y_finite)) if len(y_finite) > 0 else None
                 max_y = float(np.max(y_finite)) if len(y_finite) > 0 else None
@@ -182,19 +171,38 @@ if st.button("Generate Plot(s)"):
                         "Max Y (Curve)": max_y
                     })
             st.dataframe(pd.DataFrame(sample_points))
+            # Debug plot of sample points
+            if sample_points:
+                fig_debug, ax_debug = plt.subplots(figsize=(8, 6))
+                for curve_name in set(p['Curve'] for p in sample_points):
+                    curve_points = [p for p in sample_points if p['Curve'] == curve_name]
+                    x_vals = [p['X'] for p in curve_points]
+                    y_vals = [p['Y'] for p in curve_points]
+                    ax_debug.scatter(x_vals, y_vals, label=curve_name, s=50)
+                ax_debug.set_xlabel(x_label)
+                ax_debug.set_ylabel(y_label)
+                ax_debug.set_xlim(x_min, x_max)
+                ax_debug.set_ylim(y_min, y_max)
+                ax_debug.legend()
+                ax_debug.set_title("Debug: Sample Points")
+                st.pyplot(fig_debug)
+                plt.close(fig_debug)
         else:
             data_ref = load_reference_data(uploaded_file)
+            if not data_ref:
+                st.error("No valid data loaded from Excel. Please check file format.")
+                st.stop()
             if auto_scale_y:
                 y_vals_all = []
                 for entry in data_ref:
                     x_scaled = np.linspace(-1, 1, 100)
-                    y_vals = np.polyval(entry['coefficients'], x_scaled)
+                    y_vals = np.polyval(entry['coefficients'], x_scaled) * entry.get('scale_factor', 1.0)
                     y_vals = y_vals[np.isfinite(y_vals)]
                     if len(y_vals) > 0:
                         y_vals_all.extend(y_vals)
                 if y_vals_all:
-                    y_min = float(np.min(y_vals_all) * 1.1)
-                    y_max = float(np.max(y_vals_all) * 1.1)
+                    y_min = float(np.min(y_vals_all) * 1.2)
+                    y_max = float(np.max(y_vals_all) * 1.2)
                     if y_min == y_max:
                         y_min -= 1
                         y_max += 1
@@ -210,7 +218,7 @@ if st.button("Generate Plot(s)"):
                 title, x_label, y_label, plot_grouping)
 
         if not figs:
-            st.error("No plots generated. Check debug mode for details.")
+            st.error("No plots generated. Enable debug mode to diagnose issues.")
             st.stop()
 
         if plot_grouping == "All in One" and len(data_ref) > 15:
