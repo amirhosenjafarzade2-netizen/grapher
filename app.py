@@ -322,47 +322,77 @@ if st.button("📊 Generate Plot", type="primary"):
                 y_min = y_min_input
                 y_max = y_max_input
             
-            # Generate plots
-            plot_configs = {
-                'x_min': x_min,
-                'x_max': x_max,
-                'y_min': y_min,
-                'y_max': y_max,
-                'stop_y_exit': stop_y_exit,
-                'stop_x_exit': stop_x_exit,
-                'invert_y_axis': invert_y_axis,
-                'color_mode': color_mode,
-                'num_colors': num_colors,
-                'bg_color': bg_color,
-                'legend_loc': legend_loc,
-                'plot_grouping': plot_grouping,
-                'custom_legends': custom_legends,
-                'show_grid': show_grid,
-                'grid_major_x': grid_major_x,
-                'grid_minor_x': grid_minor_x,
-                'x_major_int': x_major_int,
-                'x_minor_int': x_minor_int,
-                'grid_major_y': grid_major_y,
-                'grid_minor_y': grid_minor_y,
-                'y_major_int': y_major_int,
-                'y_minor_int': y_minor_int
-            }
+            # Default values for missing parameters
+            x_pos = "bottom"
+            y_pos = "left"
+            title = "Polynomial Curves"
+            x_label = "Pressure (psi)"
+            y_label = "Depth (ft)"
+            figsize = (10, 6)
+            dpi = 300
             
-            # Generate and display plots
-            plots = plot_graphs(data, **plot_configs)
+            # Call plot_graphs with correct parameter order
+            figs, skipped_curves = plot_graphs(
+                data_ref=data,
+                use_colorful=use_colorful,
+                num_colors=num_colors,
+                bg_color=bg_color,
+                legend_loc=legend_loc,
+                custom_legends=custom_legends,
+                show_grid=show_grid,
+                grid_major_x=grid_major_x,
+                grid_minor_x=grid_minor_x,
+                grid_major_y=grid_major_y,
+                grid_minor_y=grid_minor_y,
+                x_min=x_min,
+                x_max=x_max,
+                y_min=y_min,
+                y_max=y_max,
+                x_pos=x_pos,
+                y_pos=y_pos,
+                x_major_int=x_major_int,
+                x_minor_int=x_minor_int,
+                y_major_int=y_major_int,
+                y_minor_int=y_minor_int,
+                title=title,
+                x_label=x_label,
+                y_label=y_label,
+                plot_grouping=plot_grouping,
+                auto_scale_y=auto_scale_y,
+                stop_y_exit=stop_y_exit,
+                stop_x_exit=stop_x_exit,
+                debug=debug,
+                invert_y_axis=invert_y_axis,
+                figsize=figsize,
+                dpi=dpi
+            )
             
-            for i, plot in enumerate(plots):
-                st.pyplot(plot)
+            # Display plots
+            for i, (fig, curve_name) in enumerate(figs):
+                st.subheader(f"Plot {i+1}" + (f": {curve_name}" if plot_grouping == "One per Curve" else ""))
+                st.pyplot(fig)
                 
                 # Download button for individual plots
                 buf = BytesIO()
-                plot.savefig(buf, format='png', bbox_inches='tight')
+                fig.savefig(buf, format='png', bbox_inches='tight')
                 buf.seek(0)
                 img_str = base64.b64encode(buf.read()).decode()
                 st.markdown(f"""
-                <a href="data:image/png;base64,{img_str}" download="curve_plot_{i+1}.png">
-                    💾 Download Plot {i+1}
+                <a href="data:image/png;base64,{img_str}" download="curve_plot_{i+1}_{curve_name.replace(' ', '_')}.png">
+                    💾 Download Plot {i+1}: {curve_name}
                 </a>
+                """, unsafe_allow_html=True)
+                
+                # Close the figure to free memory
+                plt.close(fig)
+            
+            # Show skipped curves if any
+            if skipped_curves:
+                st.markdown(f"""
+                <div class="warning-box">
+                    <strong>⚠️ Skipped Curves:</strong><br>
+                    {', '.join(skipped_curves[:3])}{'...' if len(skipped_curves) > 3 else ''}
+                </div>
                 """, unsafe_allow_html=True)
                 
         except Exception as e:
