@@ -37,10 +37,9 @@ def plot_graphs(data_ref, use_colorful, num_colors, bg_color, legend_loc, custom
         "Center Right": "center right",
         "Upper Center": "upper center",
         "Lower Center": "lower center",
-        "Center": "center",
         "Best": "best"
     }
-    matplotlib_loc = loc_map.get(legend_loc, "upper right")
+    matplotlib_loc = loc_map.get(legend_loc, "best")
 
     # Parse custom legends
     custom_label_map = {}
@@ -64,7 +63,10 @@ def plot_graphs(data_ref, use_colorful, num_colors, bg_color, legend_loc, custom
 
     # Check if axes should be centered at (0,0)
     center_x = x_min < 0 < x_max
-    center_y = y_min < 0 < y_max if not auto_scale_y else True
+    if not auto_scale_y and y_min is not None and y_max is not None:
+        center_y = y_min < 0 < y_max
+    else:
+        center_y = True
 
     # Determine number of points based on range size for better resolution
     x_range_width = x_max - x_min
@@ -119,14 +121,14 @@ def plot_graphs(data_ref, use_colorful, num_colors, bg_color, legend_loc, custom
         valid = valid & (p1_full >= x_min) & (p1_full <= x_max)
         
         # Apply y limits if not auto-scaling
-        if not auto_scale_y:
+        if not auto_scale_y and y_min is not None and y_max is not None:
             valid = valid & (y_vals >= y_min) & (y_vals <= y_max)
 
         p_plot = p1_full[valid]
         y_plot = y_vals[valid]
 
         # Handle stop_y_exit - only truncate after first exit, not before
-        if stop_y_exit and not auto_scale_y and len(p_plot) > 0:
+        if stop_y_exit and not auto_scale_y and y_min is not None and y_max is not None and len(p_plot) > 0:
             # Find first point that exits y-range (but only after entering)
             in_range = (y_vals >= y_min) & (y_vals <= y_max) & np.isfinite(y_vals)
             exit_points = np.where(~in_range & np.roll(in_range, 1))[0]
@@ -164,7 +166,7 @@ def plot_graphs(data_ref, use_colorful, num_colors, bg_color, legend_loc, custom
 
         # Add label for non-colorful mode
         if not use_colorful and len(p_plot) > 0:
-            y_range = y_max - y_min if not auto_scale_y else (max(y_plot) - min(y_plot))
+            y_range = (y_max - y_min) if not auto_scale_y and y_min is not None and y_max is not None else (max(y_plot) - min(y_plot))
             x_range = x_max - x_min
             end_x, end_y = p_plot[-1], y_plot[-1] - 0.05 * y_range if y_range > 0 else y_plot[-1]
             
@@ -181,8 +183,6 @@ def plot_graphs(data_ref, use_colorful, num_colors, bg_color, legend_loc, custom
         fig.patch.set_facecolor(bg_color)
         ax.set_facecolor(bg_color)
         
-        label_positions = []
-        texts = []
         all_y_vals = []
         plot_data = []
         successful_plots = 0
@@ -247,7 +247,8 @@ def plot_graphs(data_ref, use_colorful, num_colors, bg_color, legend_loc, custom
         ax.set_xlabel(x_label)
         ax.set_ylabel(y_label)
         ax.set_xlim(x_min, x_max)
-        ax.set_ylim(y_min, y_max)
+        if y_min is not None and y_max is not None:
+            ax.set_ylim(y_min, y_max)
         if invert_y_axis:
             ax.invert_yaxis()
 
@@ -349,7 +350,8 @@ def plot_graphs(data_ref, use_colorful, num_colors, bg_color, legend_loc, custom
             ax.set_xlabel(x_label)
             ax.set_ylabel(y_label)
             ax.set_xlim(x_min, x_max)
-            ax.set_ylim(curve_y_min, curve_y_max)
+            if curve_y_min is not None and curve_y_max is not None:
+                ax.set_ylim(curve_y_min, curve_y_max)
             if invert_y_axis:
                 ax.invert_yaxis()
 
