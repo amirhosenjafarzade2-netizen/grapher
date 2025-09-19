@@ -7,6 +7,7 @@ import base64
 import numpy as np
 import pandas as pd
 import time
+import zipfile  # Added missing import for ZIP functionality
 
 # Page configuration
 st.set_page_config(
@@ -62,6 +63,7 @@ with col_axis_options[3]:
         key="invert_y_axis"
     )
 
+# FIXED: Y-axis controls with ORIGINAL conditional rendering and layout
 col_range1, col_range2, col_range3, col_range4 = st.columns(4)
 with col_range1:
     x_min = st.number_input(
@@ -78,26 +80,29 @@ with col_range2:
         key="x_max_range"
     )
 
-# Y-axis controls with conditional rendering - FIXED SCOPE ISSUES
-if auto_scale_y:
-    st.info("📏 Y-axis will be auto-scaled based on data")
-    y_min_input = None  # For auto-scaling, pass None to plotter
-    y_max_input = None
-else:
-    col_range3.write("Y Min")
-    y_min_input = st.number_input(
-        "Y Min", 
-        value=-1000.0, 
-        help="Minimum Y value (Depth, ft) - can be negative",
-        key="y_min_range"
-    )
-    col_range4.write("Y Max")
-    y_max_input = st.number_input(
-        "Y Max", 
-        value=1000.0, 
-        help="Maximum Y value (Depth, ft)",
-        key="y_max_range"
-    )
+with col_range3:
+    if auto_scale_y:
+        st.info("📏 Y-axis will be auto-scaled based on data")
+        y_min_input = -1000.0  # Default for auto-scale (but won't be used)
+    else:
+        y_min_input = st.number_input(
+            "Y Min", 
+            value=-1000.0, 
+            help="Minimum Y value (Depth, ft) - can be negative",
+            key="y_min_range"
+        )
+
+with col_range4:
+    if auto_scale_y:
+        st.info("📏 Y-axis will be auto-scaled based on data")
+        y_max_input = 1000.0  # Default for auto-scale (but won't be used)
+    else:
+        y_max_input = st.number_input(
+            "Y Max", 
+            value=1000.0, 
+            help="Maximum Y value (Depth, ft)",
+            key="y_max_range"
+        )
 
 # Range validation
 if x_min >= x_max:
@@ -108,7 +113,7 @@ if x_min >= x_max:
     """, unsafe_allow_html=True)
     st.stop()
 
-if not auto_scale_y and y_min_input is not None and y_max_input is not None and y_min_input >= y_max_input:
+if not auto_scale_y and y_min_input >= y_max_input:
     st.markdown("""
     <div class="error-box">
         <strong>❌ Invalid Y Range:</strong> Y Max must be greater than Y Min
@@ -284,7 +289,7 @@ with col_grid2:
     if auto_scale_y:
         y_range = 2000  # Default range for auto-scaling
     else:
-        y_range = abs(y_max_input - y_min_input) if y_max_input is not None and y_min_input is not None else 2000
+        y_range = abs(y_max_input - y_min_input)
     
     grid_major_y_default = max(1e-10, y_range / 10)
     grid_minor_y_default = max(1e-10, y_range / 50)
@@ -352,7 +357,7 @@ if st.button("📊 Generate Plot", type="primary", use_container_width=True):
                 """, unsafe_allow_html=True)
                 st.stop()
             
-            # Determine Y-axis limits - FIXED FOR AUTO-SCALING
+            # FIXED: Determine Y-axis limits for auto-scaling
             if auto_scale_y:
                 y_min_final = None
                 y_max_final = None
