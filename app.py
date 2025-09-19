@@ -1,12 +1,13 @@
 import streamlit as st
 import matplotlib.pyplot as plt
-from data_loader import load_reference_data
+from data_loader import load_reference_data, preview_data
 from plotter import plot_graphs
 from io import BytesIO
 import base64
 import numpy as np
 import pandas as pd
-import zipfile
+import time
+import zipfile  # Added missing import for ZIP functionality
 
 # Page configuration
 st.set_page_config(
@@ -23,10 +24,7 @@ st.markdown("""
     .warning-box {background-color: #fff3cd; padding: 1rem; border-radius: 0.5rem; border-left: 4px solid #ffc107;}
     .success-box {background-color: #d4edda; padding: 1rem; border-radius: 0.5rem; border-left: 4px solid #28a745;}
     .error-box {background-color: #f8d7da; padding: 1rem; border-radius: 0.5rem; border-left: 4px solid #dc3545;}
-    .info-box {background-color: #d1ecf1; padding: 1rem; border-radius: 0.5rem; border-left: 4px solid #17a2b8;}
     .stNumberInput > div > div > div > div {width: 100%;}
-    .curve-selector {background-color: #f8f9fa; padding: 1rem; border-radius: 0.5rem; margin: 0.5rem 0;}
-    .selection-mode {background-color: #e9ecef; padding: 1rem; border-radius: 0.5rem; margin: 0.5rem 0;}
 </style>
 """, unsafe_allow_html=True)
 
@@ -35,69 +33,6 @@ st.markdown("Plot polynomial curves with automatic range handling (from -10000 t
 
 # Debug Toggle
 debug = st.sidebar.checkbox("Enable Debug Mode", value=False, help="Show detailed data processing info")
-
-# Data Upload Section - FIRST THING
-st.markdown('<h2 class="section-header">📁 Data Upload</h2>', unsafe_allow_html=True)
-
-uploaded_file = st.file_uploader(
-    "Choose Excel file", 
-    type=['xlsx', 'xls'], 
-    help="Upload your polynomial data", 
-    key="uploaded_file"
-)
-
-# Load data immediately after upload
-data = []
-skipped_info = []
-
-if uploaded_file is not None:
-    with st.spinner("Loading data..."):
-        uploaded_file.seek(0)
-        data, skipped_info = load_reference_data(uploaded_file, debug=debug)
-        
-        if data:
-            st.markdown(f"""
-            <div class="success-box">
-                ✅ Data loaded successfully! Found {len(data)} valid curves
-            </div>
-            """, unsafe_allow_html=True)
-        else:
-            st.markdown("""
-            <div class="error-box">
-                ❌ No valid data found in the file. Please check the Excel format.
-            </div>
-            """, unsafe_allow_html=True)
-            if skipped_info:
-                with st.expander("🔍 Show validation details"):
-                    for skip in skipped_info:
-                        st.write(f"• {skip}")
-            st.stop()
-elif debug:
-    with st.spinner("Loading sample data..."):
-        data, skipped_info = load_reference_data(None, debug=True)
-        st.markdown(f"""
-        <div class="success-box">
-            🧪 Debug Mode: Using sample data ({len(data)} curves)
-        </div>
-        """, unsafe_allow_html=True)
-
-# Stop if no data
-if not data:
-    st.markdown("""
-    <div class="warning-box">
-        ⚠️ No data loaded. Please upload an Excel file to continue.
-    </div>
-    """, unsafe_allow_html=True)
-    st.stop()
-
-if debug:
-    with st.expander("🔍 Debug Information"):
-        st.write("**Loaded Data:**")
-        st.json(data)
-        if skipped_info:
-            st.markdown("**Skipped Rows:**")
-            for skip in skipped_info[:10]:
-                st.write(f"• {skip}")
 
 # Axis Ranges Section
 st.markdown('<h2 class="section-header">🎯 Axis Configuration</h2>', unsafe_allow_html=True)
@@ -128,6 +63,7 @@ with col_axis_options[3]:
         key="invert_y_axis"
     )
 
+# FIXED: Y-axis controls with ORIGINAL conditional rendering and layout
 col_range1, col_range2, col_range3, col_range4 = st.columns(4)
 with col_range1:
     x_min = st.number_input(
@@ -147,7 +83,7 @@ with col_range2:
 with col_range3:
     if auto_scale_y:
         st.info("📏 Y-axis will be auto-scaled based on data")
-        y_min_input = -1000.0
+        y_min_input = -1000.0  # Default for auto-scale (but won't be used)
     else:
         y_min_input = st.number_input(
             "Y Min", 
@@ -159,7 +95,7 @@ with col_range3:
 with col_range4:
     if auto_scale_y:
         st.info("📏 Y-axis will be auto-scaled based on data")
-        y_max_input = 1000.0
+        y_max_input = 1000.0  # Default for auto-scale (but won't be used)
     else:
         y_max_input = st.number_input(
             "Y Max", 
@@ -185,177 +121,74 @@ if not auto_scale_y and y_min_input >= y_max_input:
     """, unsafe_allow_html=True)
     st.stop()
 
-# Curve Selection Mode
-st.markdown('<h2 class="section-header">🗂️ Plot Selection Mode</h2>', unsafe_allow_html=True)
+# Data Upload Section
+st.markdown('<h2 class="section-header">📁 Data Upload</h2>', unsafe_allow_html=True)
 
-plot_mode = st.radio(
-    "Choose plotting mode:",
-    [
-        "📊 All Selected Curves in One Graph",
-        "📈 One Graph per Curve", 
-        "🔍 Two Curves Comparison (for intersections)"
-    ],
-    index=0,
-    key="plot_mode",
-    horizontal=True
-)
+col_upload1, col_upload2 = st.columns([3, 1])
+with col_upload1:
+    st.markdown("""
+    **Excel Format:**
+    - Column A: Curve Name (e.g., 'Curve1')
+    - Column B+: Coefficients (highest degree first)
+    - Maximum polynomial degree: 10
+    - Handles any range automatically (from -10000 to 10000 and beyond)
+    """)
+    uploaded_file = st.file_uploader(
+        "Choose Excel file", 
+        type=['xlsx', 'xls'], 
+        help="Upload your polynomial data", 
+        key="uploaded_file"
+    )
+with col_upload2:
+    if uploaded_file is not None:
+        if st.button("👁️ Preview Data", key="preview_button", use_container_width=True):
+            with st.spinner("Previewing data..."):
+                # Create a copy for preview to avoid file handle conflicts
+                preview_file = BytesIO(uploaded_file.read())
+                preview_file.seek(0)
+                preview_result = preview_data(preview_file, max_rows=3)
+                
+                if "error" not in preview_result:
+                    with st.container():
+                        st.markdown(""" 
+                        <div class="success-box">
+                            ✅ Data Preview Successful
+                        </div>
+                        """, unsafe_allow_html=True)
+                        col1, col2 = st.columns(2)
+                        with col1:
+                            st.metric("Rows", preview_result["rows"])
+                            st.metric("Columns", preview_result["columns"])
+                        with col2:
+                            sample_row = preview_result["first_row"][:6] if preview_result["first_row"] else []
+                            st.write("**Sample Row:**", sample_row)
+                            if "sample_data" in preview_result:
+                                st.write("**Sample Data:**")
+                                st.dataframe(pd.DataFrame(preview_result["sample_data"]))
+                else:
+                    st.markdown(f""" 
+                    <div class="error-box">
+                        ❌ Preview Error: {preview_result["error"]}
+                    </div>
+                    """, unsafe_allow_html=True)
 
-selected_data = []
-
-if plot_mode == "📊 All Selected Curves in One Graph":
-    st.markdown('<div class="selection-mode">')
-    st.markdown("**Select curves to include in the combined plot:**")
-    
-    num_cols = min(3, len(data))
-    curves_per_col = (len(data) + num_cols - 1) // num_cols
-    cols = st.columns(num_cols)
-    
-    for col_idx in range(num_cols):
-        with cols[col_idx]:
-            st.markdown(f'<div class="curve-selector">', unsafe_allow_html=True)
-            start_idx = col_idx * curves_per_col
-            end_idx = min(start_idx + curves_per_col, len(data))
-            for i in range(start_idx, end_idx):
-                entry = data[i]
-                curve_name = entry.get('name', f'Curve {i+1}')
-                if st.checkbox(
-                    curve_name, 
-                    value=True, 
-                    key=f"select_all_mode_{i}"
-                ):
-                    selected_data.append(entry)
-            st.markdown('</div>', unsafe_allow_html=True)
-    
-    col_btn1, col_btn2 = st.columns(2)
-    with col_btn1:
-        if st.button("✅ Select All Curves", key="select_all_mode"):
-            selected_data.clear()
-            for entry in data:
-                selected_data.append(entry)
-            st.rerun()
-    with col_btn2:
-        if st.button("❌ Deselect All Curves", key="deselect_all_mode"):
-            selected_data.clear()
-            st.rerun()
-    
-    st.markdown('</div>', unsafe_allow_html=True)
-    
-    num_selected = len(selected_data)
-    st.markdown(f"""
-    <div class="info-box">
-        📊 **Summary:** {num_selected} of {len(data)} curves selected for combined plot
-    </div>
-    """, unsafe_allow_html=True)
-    
-    if num_selected < 1:
-        st.markdown("""
-        <div class="error-box">
-            ❌ Please select at least one curve to plot
+# Handle no file upload - FIXED FOR DEBUG MODE
+if not uploaded_file:
+    if not debug:
+        st.markdown(""" 
+        <div class="warning-box">
+            ⚠️ No File Uploaded: Please upload an Excel file to generate plots
         </div>
         """, unsafe_allow_html=True)
         st.stop()
-
-elif plot_mode == "📈 One Graph per Curve":
-    st.markdown('<div class="selection-mode">')
-    st.markdown("**Select curves for individual plots:**")
-    
-    select_all_individual = st.checkbox(
-        "Plot all curves individually", 
-        value=True, 
-        key="select_all_individual"
-    )
-    
-    if not select_all_individual:
-        num_cols = min(3, len(data))
-        curves_per_col = (len(data) + num_cols - 1) // num_cols
-        cols = st.columns(num_cols)
-        
-        for col_idx in range(num_cols):
-            with cols[col_idx]:
-                st.markdown(f'<div class="curve-selector">', unsafe_allow_html=True)
-                start_idx = col_idx * curves_per_col
-                end_idx = min(start_idx + curves_per_col, len(data))
-                for i in range(start_idx, end_idx):
-                    entry = data[i]
-                    curve_name = entry.get('name', f'Curve {i+1}')
-                    if st.checkbox(
-                        curve_name, 
-                        value=True, 
-                        key=f"select_individual_{i}"
-                    ):
-                        selected_data.append(entry)
-                st.markdown('</div>', unsafe_allow_html=True)
-        
-        col_btn1, col_btn2 = st.columns(2)
-        with col_btn1:
-            if st.button("✅ Select All for Individual", key="select_all_individual_btn"):
-                selected_data.clear()
-                for entry in data:
-                    selected_data.append(entry)
-                st.rerun()
-        with col_btn2:
-            if st.button("❌ Deselect All Individual", key="deselect_individual"):
-                selected_data.clear()
-                st.rerun()
     else:
-        selected_data = data.copy()
-    
-    st.markdown('</div>', unsafe_allow_html=True)
-    
-    num_selected = len(selected_data)
-    st.markdown(f"""
-    <div class="info-box">
-        📈 **Summary:** Will create {num_selected} individual plots
-    </div>
-    """, unsafe_allow_html=True)
-
-else:  # Two curves comparison mode
-    st.markdown('<div class="selection-mode">')
-    st.markdown("**Select two curves for comparison and intersection analysis:**")
-    
-    col_pair1, col_pair2 = st.columns([1, 1])
-    
-    with col_pair1:
-        st.markdown("**Curve 1:**")
-        curve1_options = [entry.get('name', f'Curve {i+1}') for i, entry in enumerate(data)]
-        selected_curve1_idx = st.selectbox(
-            "Choose first curve:",
-            range(len(curve1_options)),
-            format_func=lambda i: curve1_options[i],
-            key="select_curve1"
-        )
-    
-    with col_pair2:
-        st.markdown("**Curve 2:**")
-        available_curve2_options = [curve1_options[i] for i in range(len(curve1_options)) if i != selected_curve1_idx]
-        selected_curve2_idx = st.selectbox(
-            "Choose second curve:",
-            range(len(available_curve2_options)),
-            format_func=lambda i: available_curve2_options[i],
-            key="select_curve2"
-        )
-        selected_curve2_original_idx = [i for i in range(len(curve1_options)) if i != selected_curve1_idx][selected_curve2_idx]
-    
-    selected_data.append(data[selected_curve1_idx])
-    selected_data.append(data[selected_curve2_original_idx])
-    
-    st.markdown('</div>', unsafe_allow_html=True)
-    
-    curve1_name = curve1_options[selected_curve1_idx]
-    curve2_name = available_curve2_options[selected_curve2_idx]
-    st.markdown(f"""
-    <div class="info-box">
-        🔍 **Comparison:** {curve1_name} vs {curve2_name}
-    </div>
-    """, unsafe_allow_html=True)
-
-# Determine plot_grouping based on mode
-if plot_mode == "📊 All Selected Curves in One Graph":
-    plot_grouping = "All in One"
-elif plot_mode == "📈 One Graph per Curve":
-    plot_grouping = "One per Curve"
-else:
-    plot_grouping = "All in One"
+        # Debug mode: generate sample data
+        st.markdown("""
+        <div class="success-box">
+            🧪 Debug Mode: Using sample data
+        </div>
+        """, unsafe_allow_html=True)
+        uploaded_file = None  # Will trigger debug data generation
 
 # Plot Configuration Section
 st.markdown('<h2 class="section-header">🎨 Plot Configuration</h2>', unsafe_allow_html=True)
@@ -372,9 +205,9 @@ with col_style1:
     if use_colorful:
         num_colors = st.slider(
             "Number of Colors", 
-            min_value=1, 
-            max_value=min(50, len(selected_data)), 
-            value=min(5, len(selected_data)), 
+            min_value=5, 
+            max_value=50, 
+            value=35, 
             key="num_colors"
         )
     else:
@@ -393,6 +226,12 @@ with col_style2:
         index=8, 
         key="legend_loc"
     )
+    plot_grouping = st.radio(
+        "Plot Grouping", 
+        ["All in One", "One per Curve"], 
+        horizontal=True, 
+        key="plot_grouping"
+    )
     custom_legends = st.text_area(
         "Custom Legends (Optional)", 
         placeholder="Curve1: #ff0000\nCurve2\nCurve3: #00ff00", 
@@ -401,42 +240,14 @@ with col_style2:
         key="custom_legends"
     )
 
-# Advanced Analytics Section
-st.markdown('<h2 class="section-header">🔬 Advanced Analytics</h2>', unsafe_allow_html=True)
-col_analytics1, col_analytics2, col_analytics3 = st.columns(3)
-
-with col_analytics1:
-    if plot_mode in ["📊 All Selected Curves in One Graph", "🔍 Two Curves Comparison (for intersections)"]:
-        intersect_mode = st.checkbox(
-            "🔍 Enable Intersection Finder", 
-            value=plot_mode == "🔍 Two Curves Comparison (for intersections)", 
-            key="intersect_mode"
-        )
-    else:
-        intersect_mode = False
-
-with col_analytics2:
-    plot_deriv = st.checkbox(
-        "📈 Plot Derivatives", 
-        value=False, 
-        key="plot_deriv"
-    )
-
-with col_analytics3:
-    show_integral = st.checkbox(
-        "📊 Show Integrals in Legend", 
-        value=False, 
-        key="show_integral"
-    )
-
 # Grid and Ticks Section
 st.markdown('<h2 class="section-header">📐 Grid & Ticks</h2>', unsafe_allow_html=True)
 show_grid = st.checkbox("Show Grid", value=True, key="show_grid")
-
 col_grid1, col_grid2 = st.columns(2)
 
 with col_grid1:
     st.subheader("X-Axis (Pressure)")
+    # Calculate reasonable defaults based on range
     x_range = abs(x_max - x_min)
     grid_major_x_default = max(1e-10, x_range / 10)
     grid_minor_x_default = max(1e-10, x_range / 50)
@@ -474,8 +285,9 @@ with col_grid1:
 
 with col_grid2:
     st.subheader("Y-Axis (Depth)")
+    # Calculate reasonable defaults based on range
     if auto_scale_y:
-        y_range = 2000
+        y_range = 2000  # Default range for auto-scaling
     else:
         y_range = abs(y_max_input - y_min_input)
     
@@ -517,12 +329,35 @@ with col_grid2:
 if st.button("📊 Generate Plot", type="primary", use_container_width=True):
     with st.spinner("Generating plots..."):
         try:
-            # Ensure we have selected data
-            if not selected_data:
-                st.error("No curves selected for plotting!")
+            # Reset uploaded file position if needed
+            if uploaded_file is not None:
+                uploaded_file.seek(0)
+            
+            # Load data - FIXED FOR DEBUG MODE
+            if debug and uploaded_file is None:
+                data, debug_info = load_reference_data(None, debug=True)
+                if debug_info:
+                    st.markdown("### 🧪 Debug Data Info")
+                    for info in debug_info:
+                        st.write(info)
+            else:
+                data, _ = load_reference_data(uploaded_file, debug=debug)
+            
+            if debug:
+                st.markdown("### 🔍 Debug Information")
+                st.write("**Loaded Data:**")
+                st.json(data)
+            
+            # Validate data loaded
+            if not data:
+                st.markdown("""
+                <div class="error-box">
+                    ❌ No valid data loaded. Please check your Excel file format.
+                </div>
+                """, unsafe_allow_html=True)
                 st.stop()
             
-            # Determine Y-axis limits for auto-scaling
+            # FIXED: Determine Y-axis limits for auto-scaling
             if auto_scale_y:
                 y_min_final = None
                 y_max_final = None
@@ -534,16 +369,14 @@ if st.button("📊 Generate Plot", type="primary", use_container_width=True):
             x_pos = "bottom"
             y_pos = "left"
             title = "Polynomial Curves"
-            if plot_mode == "🔍 Two Curves Comparison (for intersections)":
-                title = f"Intersection Analysis: {selected_data[0].get('name', 'Curve1')} vs {selected_data[1].get('name', 'Curve2')}"
             x_label = "Pressure (psi)"
             y_label = "Depth (ft)"
             figsize = (12, 8) if plot_grouping == "One per Curve" else (14, 10)
             dpi = 300
             
-            # Call plot_graphs with all parameters
+            # Call plot_graphs with correct parameter order
             figs, skipped_curves = plot_graphs(
-                data_ref=selected_data,
+                data_ref=data,
                 use_colorful=use_colorful,
                 num_colors=num_colors,
                 bg_color=bg_color,
@@ -556,8 +389,8 @@ if st.button("📊 Generate Plot", type="primary", use_container_width=True):
                 grid_minor_y=grid_minor_y,
                 x_min=x_min,
                 x_max=x_max,
-                y_min=y_min_final,
-                y_max=y_max_final,
+                y_min=y_min_final,  # FIXED: Use None for auto-scaling
+                y_max=y_max_final,  # FIXED: Use None for auto-scaling
                 x_pos=x_pos,
                 y_pos=y_pos,
                 x_major_int=x_major_int,
@@ -574,10 +407,7 @@ if st.button("📊 Generate Plot", type="primary", use_container_width=True):
                 debug=debug,
                 invert_y_axis=invert_y_axis,
                 figsize=figsize,
-                dpi=dpi,
-                intersect_mode=intersect_mode,
-                plot_deriv=plot_deriv,
-                show_integral=show_integral
+                dpi=dpi
             )
             
             # Display plots
@@ -588,27 +418,14 @@ if st.button("📊 Generate Plot", type="primary", use_container_width=True):
                 </div>
                 """, unsafe_allow_html=True)
             else:
-                mode_msg = ""
-                if plot_mode == "📊 All Selected Curves in One Graph":
-                    mode_msg = f" ({len(selected_data)} curves in one plot)"
-                elif plot_mode == "📈 One Graph per Curve":
-                    mode_msg = f" ({len(selected_data)} individual plots)"
-                elif plot_mode == "🔍 Two Curves Comparison (for intersections)":
-                    mode_msg = " (comparison with intersections)"
-                
-                success_msg = f"✅ Generated {len(figs)} plot{'' if len(figs) == 1 else 's'}{mode_msg}"
-                if intersect_mode and plot_mode != "📈 One Graph per Curve":
-                    success_msg += " with intersection points!"
-                
                 st.markdown(f"""
                 <div class="success-box">
-                    {success_msg}
+                    ✅ Generated {len(figs)} plot{'s' if len(figs) > 1 else ''}
                 </div>
                 """, unsafe_allow_html=True)
                 
                 for i, (fig, curve_name) in enumerate(figs):
-                    display_name = curve_name if plot_grouping == "One per Curve" else f"{plot_mode} - {curve_name}"
-                    st.subheader(f"Plot {i+1}: {display_name}")
+                    st.subheader(f"Plot {i+1}" + (f": {curve_name}" if plot_grouping == "One per Curve" else ""))
                     
                     # Display plot
                     st.pyplot(fig)
@@ -618,14 +435,14 @@ if st.button("📊 Generate Plot", type="primary", use_container_width=True):
                     fig.savefig(buf, format='png', bbox_inches='tight', dpi=dpi)
                     buf.seek(0)
                     img_str = base64.b64encode(buf.read()).decode()
-                    safe_name = curve_name.replace(' ', '_').replace('/', '_')[:50]
-                    mode_suffix = plot_mode.replace(" ", "_").replace("(", "").replace(")", "").replace(",", "")[:20]
+                    safe_name = curve_name.replace(' ', '_').replace('/', '_')[:50]  # Sanitize filename
                     st.markdown(f"""
-                    <a href="data:image/png;base64,{img_str}" download="curve_plot_{i+1}_{mode_suffix}_{safe_name}.png" style="text-decoration: none; padding: 0.5rem; background-color: #007bff; color: white; border-radius: 0.25rem; display: inline-block;">
+                    <a href="data:image/png;base64,{img_str}" download="curve_plot_{i+1}_{safe_name}.png" style="text-decoration: none; padding: 0.5rem; background-color: #007bff; color: white; border-radius: 0.25rem; display: inline-block;">
                         💾 Download Plot {i+1}: {curve_name}
                     </a>
                     """, unsafe_allow_html=True)
                     
+                    # Close the figure to free memory
                     plt.close(fig)
                 
                 # Bulk download option
@@ -637,25 +454,26 @@ if st.button("📊 Generate Plot", type="primary", use_container_width=True):
                             buf = BytesIO()
                             fig.savefig(buf, format='png', bbox_inches='tight', dpi=dpi)
                             buf.seek(0)
-                            safe_name = f"plot_{i+1}_{curve_name.replace(' ', '_').replace('/', '_')[:50]}.png"
+                            safe_name = f"curve_plot_{i+1}_{curve_name.replace(' ', '_').replace('/', '_')[:50]}.png"
                             zip_file.writestr(safe_name, buf.getvalue())
                     
                     zip_buffer.seek(0)
                     zip_str = base64.b64encode(zip_buffer.read()).decode()
-                    zip_filename = f"curve_plots_{plot_mode.replace(' ', '_').replace('(', '').replace(')', '').replace(',', '')[:30]}.zip"
                     st.markdown(f"""
-                    <a href="data:application/zip;base64,{zip_str}" download="{zip_filename}" style="text-decoration: none; padding: 0.5rem; background-color: #28a745; color: white; border-radius: 0.25rem; display: inline-block;">
+                    <a href="data:application/zip;base64,{zip_str}" download="curve_plots.zip" style="text-decoration: none; padding: 0.5rem; background-color: #28a745; color: white; border-radius: 0.25rem; display: inline-block;">
                         📦 Download All Plots as ZIP
                     </a>
                     """, unsafe_allow_html=True)
             
             # Show skipped curves if any
             if skipped_curves:
-                with st.expander(f"⚠️ Skipped Curves ({len(skipped_curves)})", expanded=False):
-                    for skip in skipped_curves[:10]:
-                        st.write(f"• {skip}")
-                    if len(skipped_curves) > 10:
-                        st.write(f"... and {len(skipped_curves) - 10} more")
+                st.markdown(f"""
+                <div class="warning-box">
+                    <strong>⚠️ Skipped Curves ({len(skipped_curves)}):</strong><br>
+                    {', '.join([f'<span style="display: block;">• {s}</span>' for s in skipped_curves[:5]])}
+                    {'<br><em>...and {len(skipped_curves)-5} more</em>' if len(skipped_curves) > 5 else ''}
+                </div>
+                """, unsafe_allow_html=True)
                 
         except Exception as e:
             st.markdown(f"""
@@ -665,12 +483,13 @@ if st.button("📊 Generate Plot", type="primary", use_container_width=True):
                 <small>Please check your data format and try again.</small>
             </div>
             """, unsafe_allow_html=True)
+            # Clean up any open figures on error
             plt.close('all')
 
 # Footer
 st.markdown("---")
 st.markdown("""
 <div style='text-align: center; color: #6c757d;'>
-    <p>Advanced Curve Plotter v2.2 | Clean & Fixed | Built with ❤️ using Streamlit & Matplotlib</p>
+    <p>Advanced Curve Plotter v1.0 | Built with ❤️ using Streamlit & Matplotlib</p>
 </div>
 """, unsafe_allow_html=True)
