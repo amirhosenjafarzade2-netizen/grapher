@@ -247,7 +247,8 @@ def plot_graphs(data_ref, use_colorful, num_colors, bg_color, legend_loc, custom
     def setup_axes(ax, x_min, x_max, y_min, y_max, center_x, center_y, x_pos, y_pos, 
                    x_major_int, x_minor_int, y_major_int, y_minor_int, x_label, y_label, 
                    show_grid, grid_major_x, grid_minor_x, grid_major_y, grid_minor_y, 
-                   invert_y_axis, title, use_colorful, matplotlib_loc, bg_color, successful_plots=0):
+                   invert_y_axis, title, use_colorful, matplotlib_loc, bg_color, 
+                   successful_plots=0, title_suffix=""):
         """Centralized axis and grid setup."""
         # Basic axis setup
         ax.set_xlabel(x_label)
@@ -315,8 +316,8 @@ def plot_graphs(data_ref, use_colorful, num_colors, bg_color, legend_loc, custom
             dummy_handle = Line2D([0], [0], color='black', linewidth=2)
             ax.legend([dummy_handle], ['Curves'], loc=matplotlib_loc, bbox_to_anchor=bbox, fontsize=8, frameon=True, edgecolor='black')
 
-        # Title
-        plot_title = f"{title} - {title_suffix}" if title_suffix else title
+        # FIXED: Title logic with proper title_suffix handling
+        plot_title = f"{title} - {title_suffix}" if title_suffix and title_suffix != "" else title
         if successful_plots > 0:
             plot_title += f" ({successful_plots} curves)"
         ax.set_title(plot_title)
@@ -362,7 +363,7 @@ def plot_graphs(data_ref, use_colorful, num_colors, bg_color, legend_loc, custom
                 final_y_max = y_max_new + 1
             center_y = final_y_min < 0 < final_y_max
 
-        # Second pass: actual plotting - FIXED PARAMETER ORDER
+        # Second pass: actual plotting
         all_lines = []
         all_texts = []
         for name, entry, color, label, i in plot_data:
@@ -389,11 +390,12 @@ def plot_graphs(data_ref, use_colorful, num_colors, bg_color, legend_loc, custom
             except:
                 pass  # Gracefully handle adjustText failures
 
-        # Setup axes once
+        # FIXED: Setup axes with empty title_suffix for "All in One"
         setup_axes(ax, x_min, x_max, final_y_min, final_y_max, center_x, center_y, x_pos, y_pos, 
                   x_major_int, x_minor_int, y_major_int, y_minor_int, x_label, y_label, 
                   show_grid, grid_major_x, grid_minor_x, grid_major_y, grid_minor_y, 
-                  invert_y_axis, title, use_colorful, matplotlib_loc, bg_color, successful_plots)
+                  invert_y_axis, title, use_colorful, matplotlib_loc, bg_color, 
+                  successful_plots=successful_plots, title_suffix="")
         
         figs.append((fig, "All Curves"))
         
@@ -429,7 +431,6 @@ def plot_graphs(data_ref, use_colorful, num_colors, bg_color, legend_loc, custom
                         curve_y_max = y_max_curve + 1
                     center_y = center_y and curve_y_min < 0 < curve_y_max
             
-            # FIXED: Correct parameter order for single curve plotting
             success, line, plot_data_info = plot_single_curve(
                 ax, entry, color, label, x_min, x_max, curve_y_min, curve_y_max, 
                 auto_scale_y, stop_y_exit, stop_x_exit, center_x, center_y, x_pos, y_pos, 
@@ -443,11 +444,12 @@ def plot_graphs(data_ref, use_colorful, num_colors, bg_color, legend_loc, custom
                 plt.close(fig)
                 continue
 
-            # Setup axes once per figure
+            # FIXED: Setup axes with proper title_suffix for single curves
             setup_axes(ax, x_min, x_max, curve_y_min, curve_y_max, center_x, center_y, x_pos, y_pos, 
                       x_major_int, x_minor_int, y_major_int, y_minor_int, x_label, y_label, 
                       show_grid, grid_major_x, grid_minor_x, grid_major_y, grid_minor_y, 
-                      invert_y_axis, title, use_colorful, matplotlib_loc, bg_color, successful_plots=1)
+                      invert_y_axis, title, use_colorful, matplotlib_loc, bg_color, 
+                      successful_plots=1, title_suffix=name)
             
             figs.append((fig, name))
 
