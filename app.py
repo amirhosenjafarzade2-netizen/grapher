@@ -28,6 +28,7 @@ st.markdown("""
     .stNumberInput > div > div > div > div {width: 100%;}
     .curve-selector {background-color: #f8f9fa; padding: 1rem; border-radius: 0.5rem; margin: 0.5rem 0;}
     .curve-checkbox {margin: 0.3rem 0;}
+    .selection-mode {background-color: #e9ecef; padding: 1rem; border-radius: 0.5rem; margin: 0.5rem 0;}
 </style>
 """, unsafe_allow_html=True)
 
@@ -153,7 +154,7 @@ if uploaded_file is not None:
         if data:
             st.markdown(f"""
             <div class="success-box">
-                ✅ Data loaded successfully! Found {len(data)} curve{'s' if len(data) > 1 else ''}
+                ✅ Data loaded successfully! Found {len(data)} curves
             </div>
             """, unsafe_allow_html=True)
         else:
@@ -173,17 +174,44 @@ elif debug:
             </div>
             """, unsafe_allow_html=True)
 
-# Curve Selection Section (replaces data preview)
-if data:
-    st.markdown('<h2 class="section-header">🗂️ Select Curves to Plot</h2>', unsafe_allow_html=True)
+# Stop if no data
+if not data:
+    st.markdown("""
+    <div class="warning-box">
+        ⚠️ No data loaded. Please upload an Excel file to continue.
+    </div>
+    """, unsafe_allow_html=True)
+    st.stop()
+
+if debug:
+    st.markdown("### 🔍 Debug Information")
+    st.write("**Loaded Data:**")
+    st.json(data)
+
+# Curve Selection Mode
+st.markdown('<h2 class="section-header">🗂️ Plot Selection Mode</h2>', unsafe_allow_html=True)
+
+plot_mode = st.radio(
+    "Choose plotting mode:",
+    [
+        "📊 All Selected Curves in One Graph",
+        "📈 One Graph per Curve", 
+        "🔍 Two Curves Comparison (for intersections)"
+    ],
+    index=0,
+    key="plot_mode",
+    horizontal=True
+)
+
+selected_data = []
+
+if plot_mode == "📊 All Selected Curves in One Graph":
+    # Show all curve selection for combined plot
+    st.markdown('<div class="selection-mode">')
+    st.markdown("**Select curves to include in the combined plot:**")
     
-    # Create curve selection checkboxes
-    selected_data = []
-    
-    # Organize curves into 3 columns for better layout
     num_cols = 3
     curves_per_col = (len(data) + num_cols - 1) // num_cols
-    
     cols = st.columns(num_cols)
     
     for col_idx in range(num_cols):
@@ -197,7 +225,7 @@ if data:
                 if st.checkbox(
                     curve_name, 
                     value=True, 
-                    key=f"select_curve_{i}",
+                    key=f"select_all_mode_{i}",
                     help=f"Toggle {curve_name} for plotting"
                 ):
                     selected_data.append(entry)
@@ -206,42 +234,144 @@ if data:
     # Select All/None buttons
     col_btn1, col_btn2 = st.columns(2)
     with col_btn1:
-        if st.button("✅ Select All Curves", key="select_all", use_container_width=True):
-            # This will trigger rerun with all checkboxes checked (default behavior)
+        if st.button("✅ Select All Curves", key="select_all_mode", use_container_width=True):
             st.rerun()
     with col_btn2:
-        if st.button("❌ Deselect All Curves", key="deselect_all", use_container_width=True):
-            # Clear selected data and rerun
+        if st.button("❌ Deselect All Curves", key="deselect_all_mode", use_container_width=True):
             selected_data.clear()
             st.rerun()
     
-    # Summary
+    st.markdown('</div>', unsafe_allow_html=True)
+    
     num_selected = len(selected_data)
     st.markdown(f"""
     <div class="info-box">
-        📊 **Summary:** {num_selected} of {len(data)} curves selected for plotting
+        📊 **Summary:** {num_selected} of {len(data)} curves selected for combined plot
     </div>
     """, unsafe_allow_html=True)
     
-    if num_selected == 0:
+    if num_selected < 1:
         st.markdown("""
         <div class="error-box">
             ❌ Please select at least one curve to plot
         </div>
         """, unsafe_allow_html=True)
         st.stop()
-else:
-    st.markdown("""
-    <div class="warning-box">
-        ⚠️ No data loaded. Please upload an Excel file to continue.
+
+elif plot_mode == "📈 One Graph per Curve":
+    # Show selection for individual plots
+    st.markdown('<div class="selection-mode">')
+    st.markdown("**Select curves for individual plots:**")
+    
+    # Select all by default for individual plots
+    select_all_individual = st.checkbox(
+        "Plot all curves individually", 
+        value=True, 
+        key="select_all_individual"
+    )
+    
+    if not select_all_individual:
+        num_cols = 3
+        curves_per_col = (len(data) + num_cols - 1) // num_cols
+        cols = st.columns(num_cols)
+        
+        for col_idx in range(num_cols):
+            with cols[col_idx]:
+                st.markdown(f'<div class="curve-selector">', unsafe_allow_html=True)
+                start_idx = col_idx * curves_per_col
+                end_idx = start_idx + curves_per_col
+                for i in range(start_idx, min(end_idx, len(data))):
+                    entry = data[i]
+                    curve_name = entry.get('name', f'Curve {i+1}')
+                    if st.checkbox(
+                        curve_name, 
+                        value=True, 
+                        key=f"select_individual_{i}",
+                        help=f"Create individual plot for {curve_name}"
+                    ):
+                        selected_data.append(entry)
+                st.markdown('</div>', unsafe_allow_html=True)
+        
+        # Individual select/deselect buttons
+        col_btn1, col_btn2 = st.columns(2)
+        with col_btn1:
+            if st.button("✅ Select All for Individual", key="select_all_individual_btn", use_container_width=True):
+                st.rerun()
+        with col_btn2:
+            if st.button("❌ Deselect All Individual", key="deselect_individual", use_container_width=True):
+                selected_data.clear()
+                st.rerun()
+    
+    else:
+        # If "plot all" is selected, include all curves
+        selected_data = data.copy()
+    
+    st.markdown('</div>', unsafe_allow_html=True)
+    
+    num_selected = len(selected_data)
+    st.markdown(f"""
+    <div class="info-box">
+        📈 **Summary:** Will create {num_selected} individual plots
     </div>
     """, unsafe_allow_html=True)
-    st.stop()
+    
+    if num_selected < 1:
+        st.markdown("""
+        <div class="error-box">
+            ❌ Please select at least one curve to plot
+        </div>
+        """, unsafe_allow_html=True)
+        st.stop()
 
-if debug:
-    st.markdown("### 🔍 Debug Information")
-    st.write("**Loaded Data:**")
-    st.json(data)
+else:  # Two curves comparison mode
+    st.markdown('<div class="selection-mode">')
+    st.markdown("**Select two curves for comparison and intersection analysis:**")
+    
+    col_pair1, col_pair2 = st.columns([1, 1])
+    
+    with col_pair1:
+        st.markdown("**Curve 1:**")
+        curve1_options = [entry.get('name', f'Curve {i+1}') for i, entry in enumerate(data)]
+        selected_curve1_idx = st.selectbox(
+            "Choose first curve:",
+            range(len(curve1_options)),
+            format_func=lambda i: curve1_options[i],
+            key="select_curve1"
+        )
+    
+    with col_pair2:
+        st.markdown("**Curve 2:**")
+        # Filter out the first selected curve
+        available_curve2_options = [curve1_options[i] for i in range(len(curve1_options)) if i != selected_curve1_idx]
+        selected_curve2_idx = st.selectbox(
+            "Choose second curve:",
+            range(len(available_curve2_options)),
+            format_func=lambda i: available_curve2_options[i],
+            key="select_curve2"
+        )
+        selected_curve2_original_idx = [i for i in range(len(curve1_options)) if i != selected_curve1_idx][selected_curve2_idx]
+    
+    # Add selected curves
+    if selected_curve1_idx < len(data):
+        selected_data.append(data[selected_curve1_idx])
+    if selected_curve2_original_idx < len(data):
+        selected_data.append(data[selected_curve2_original_idx])
+    
+    st.markdown('</div>', unsafe_allow_html=True)
+    
+    st.markdown(f"""
+    <div class="info-box">
+        🔍 **Comparison:** {curve1_options[selected_curve1_idx]} vs {available_curve2_options[selected_curve2_idx]}
+    </div>
+    """, unsafe_allow_html=True)
+
+# Determine plot_grouping based on mode
+if plot_mode == "📊 All Selected Curves in One Graph":
+    plot_grouping = "All in One"
+elif plot_mode == "📈 One Graph per Curve":
+    plot_grouping = "One per Curve"
+else:  # Two curves comparison
+    plot_grouping = "All in One"  # Show both in one graph for intersection analysis
 
 # Plot Configuration Section
 st.markdown('<h2 class="section-header">🎨 Plot Configuration</h2>', unsafe_allow_html=True)
@@ -258,9 +388,9 @@ with col_style1:
     if use_colorful:
         num_colors = st.slider(
             "Number of Colors", 
-            min_value=5, 
-            max_value=50, 
-            value=min(35, len(selected_data)), 
+            min_value=2, 
+            max_value=min(50, len(selected_data)), 
+            value=min(10, len(selected_data)), 
             key="num_colors"
         )
     else:
@@ -279,12 +409,6 @@ with col_style2:
         index=8, 
         key="legend_loc"
     )
-    plot_grouping = st.radio(
-        "Plot Grouping", 
-        ["All in One", "One per Curve"], 
-        horizontal=True, 
-        key="plot_grouping"
-    )
     custom_legends = st.text_area(
         "Custom Legends (Optional)", 
         placeholder="Curve1: #ff0000\nCurve2\nCurve3: #00ff00", 
@@ -293,17 +417,21 @@ with col_style2:
         key="custom_legends"
     )
 
-# Advanced Analytics Section
+# Advanced Analytics Section (only show intersection for relevant modes)
 st.markdown('<h2 class="section-header">🔬 Advanced Analytics</h2>', unsafe_allow_html=True)
 col_analytics1, col_analytics2, col_analytics3 = st.columns(3)
 
 with col_analytics1:
-    intersect_mode = st.checkbox(
-        "🔍 Enable Intersection Finder", 
-        value=False, 
-        help="Find and mark collision points between curves (only works in 'All in One' mode)",
-        key="intersect_mode"
-    )
+    if plot_mode in ["📊 All Selected Curves in One Graph", "🔍 Two Curves Comparison (for intersections)"]:
+        intersect_mode = st.checkbox(
+            "🔍 Enable Intersection Finder", 
+            value=plot_mode == "🔍 Two Curves Comparison (for intersections)", 
+            help="Find and mark collision points between curves",
+            key="intersect_mode"
+        )
+    else:
+        intersect_mode = False
+        st.markdown("🔍 *Intersection only available for combined plots*")
 
 with col_analytics2:
     plot_deriv = st.checkbox(
@@ -420,6 +548,8 @@ if st.button("📊 Generate Plot", type="primary", use_container_width=True):
             x_pos = "bottom"
             y_pos = "left"
             title = "Polynomial Curves"
+            if plot_mode == "🔍 Two Curves Comparison (for intersections)":
+                title = f"Intersection Analysis: {selected_data[0].get('name', 'Curve1')} vs {selected_data[1].get('name', 'Curve2')}"
             x_label = "Pressure (psi)"
             y_label = "Depth (ft)"
             figsize = (12, 8) if plot_grouping == "One per Curve" else (14, 10)
@@ -472,9 +602,18 @@ if st.button("📊 Generate Plot", type="primary", use_container_width=True):
                 </div>
                 """, unsafe_allow_html=True)
             else:
-                success_msg = f"✅ Generated {len(figs)} plot{'s' if len(figs) > 1 else ''}"
-                if intersect_mode and plot_grouping == "All in One":
+                mode_msg = ""
+                if plot_mode == "📊 All Selected Curves in One Graph":
+                    mode_msg = f" ({len(selected_data)} curves in one plot)"
+                elif plot_mode == "📈 One Graph per Curve":
+                    mode_msg = f" ({len(selected_data)} individual plots)"
+                elif plot_mode == "🔍 Two Curves Comparison (for intersections)":
+                    mode_msg = " (comparison with intersections)"
+                
+                success_msg = f"✅ Generated {len(figs)} plot{'' if len(figs) == 1 else 's'}{mode_msg}"
+                if intersect_mode and plot_mode != "📈 One Graph per Curve":
                     success_msg += " with intersection points!"
+                
                 st.markdown(f"""
                 <div class="success-box">
                     {success_msg}
@@ -482,7 +621,8 @@ if st.button("📊 Generate Plot", type="primary", use_container_width=True):
                 """, unsafe_allow_html=True)
                 
                 for i, (fig, curve_name) in enumerate(figs):
-                    st.subheader(f"Plot {i+1}" + (f": {curve_name}" if plot_grouping == "One per Curve" else ""))
+                    display_name = curve_name if plot_grouping == "One per Curve" else f"{plot_mode} - {curve_name}"
+                    st.subheader(f"Plot {i+1}: {display_name}")
                     
                     # Display plot
                     st.pyplot(fig)
@@ -493,8 +633,9 @@ if st.button("📊 Generate Plot", type="primary", use_container_width=True):
                     buf.seek(0)
                     img_str = base64.b64encode(buf.read()).decode()
                     safe_name = curve_name.replace(' ', '_').replace('/', '_')[:50]
+                    mode_suffix = plot_mode.replace(" ", "_").replace("(", "").replace(")", "").replace(",", "")[:20]
                     st.markdown(f"""
-                    <a href="data:image/png;base64,{img_str}" download="curve_plot_{i+1}_{safe_name}.png" style="text-decoration: none; padding: 0.5rem; background-color: #007bff; color: white; border-radius: 0.25rem; display: inline-block;">
+                    <a href="data:image/png;base64,{img_str}" download="curve_plot_{i+1}_{mode_suffix}_{safe_name}.png" style="text-decoration: none; padding: 0.5rem; background-color: #007bff; color: white; border-radius: 0.25rem; display: inline-block;">
                         💾 Download Plot {i+1}: {curve_name}
                     </a>
                     """, unsafe_allow_html=True)
@@ -511,13 +652,13 @@ if st.button("📊 Generate Plot", type="primary", use_container_width=True):
                             buf = BytesIO()
                             fig.savefig(buf, format='png', bbox_inches='tight', dpi=dpi)
                             buf.seek(0)
-                            safe_name = f"curve_plot_{i+1}_{curve_name.replace(' ', '_').replace('/', '_')[:50]}.png"
+                            safe_name = f"plot_{i+1}_{curve_name.replace(' ', '_').replace('/', '_')[:50]}.png"
                             zip_file.writestr(safe_name, buf.getvalue())
                     
                     zip_buffer.seek(0)
                     zip_str = base64.b64encode(zip_buffer.read()).decode()
                     st.markdown(f"""
-                    <a href="data:application/zip;base64,{zip_str}" download="curve_plots.zip" style="text-decoration: none; padding: 0.5rem; background-color: #28a745; color: white; border-radius: 0.25rem; display: inline-block;">
+                    <a href="data:application/zip;base64,{zip_str}" download="curve_plots_{plot_mode.replace(' ', '_').replace('(', '').replace(')', '')}.zip" style="text-decoration: none; padding: 0.5rem; background-color: #28a745; color: white; border-radius: 0.25rem; display: inline-block;">
                         📦 Download All Plots as ZIP
                     </a>
                     """, unsafe_allow_html=True)
@@ -546,6 +687,6 @@ if st.button("📊 Generate Plot", type="primary", use_container_width=True):
 st.markdown("---")
 st.markdown("""
 <div style='text-align: center; color: #6c757d;'>
-    <p>Advanced Curve Plotter v2.0 | Enhanced with Analytics | Built with ❤️ using Streamlit & Matplotlib</p>
+    <p>Advanced Curve Plotter v2.1 | Enhanced Selection & Analytics | Built with ❤️ using Streamlit & Matplotlib</p>
 </div>
 """, unsafe_allow_html=True)
