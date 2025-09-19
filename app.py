@@ -24,6 +24,7 @@ st.markdown("""
     .warning-box {background-color: #fff3cd; padding: 1rem; border-radius: 0.5rem; border-left: 4px solid #ffc107;}
     .success-box {background-color: #d4edda; padding: 1rem; border-radius: 0.5rem; border-left: 4px solid #28a745;}
     .error-box {background-color: #f8d7da; padding: 1rem; border-radius: 0.5rem; border-left: 4px solid #dc3545;}
+    .info-box {background-color: #d1ecf1; padding: 1rem; border-radius: 0.5rem; border-left: 4px solid #17a2b8;}
     .stNumberInput > div > div > div > div {width: 100%;}
     .curve-selector {background-color: #f8f9fa; padding: 1rem; border-radius: 0.5rem; margin: 0.5rem 0;}
     .curve-checkbox {margin: 0.3rem 0;}
@@ -150,11 +151,11 @@ if uploaded_file is not None:
         data, _ = load_reference_data(uploaded_file, debug=debug)
         
         if data:
-            st.markdown("""
+            st.markdown(f"""
             <div class="success-box">
-                ✅ Data loaded successfully! Found {len(data)} curve{ 's' if len(data) > 1 else ''}
+                ✅ Data loaded successfully! Found {len(data)} curve{'s' if len(data) > 1 else ''}
             </div>
-            """.format(len=len), unsafe_allow_html=True)
+            """, unsafe_allow_html=True)
         else:
             st.markdown("""
             <div class="error-box">
@@ -166,11 +167,11 @@ elif debug:
     with st.spinner("Loading sample data..."):
         data, debug_info = load_reference_data(None, debug=True)
         if debug_info:
-            st.markdown("""
+            st.markdown(f"""
             <div class="success-box">
                 🧪 Debug Mode: Using sample data ({len(data)} curves)
             </div>
-            """.format(len=len(data)), unsafe_allow_html=True)
+            """, unsafe_allow_html=True)
 
 # Curve Selection Section (replaces data preview)
 if data:
@@ -178,72 +179,51 @@ if data:
     
     # Create curve selection checkboxes
     selected_data = []
-    all_selected = True
     
-    col_select1, col_select2, col_select3 = st.columns(3)
+    # Organize curves into 3 columns for better layout
+    num_cols = 3
+    curves_per_col = (len(data) + num_cols - 1) // num_cols
     
-    with col_select1:
-        st.markdown('<div class="curve-selector">')
-        for i, entry in enumerate(data[:len(data)//3 + 1]):
-            curve_name = entry.get('name', f'Curve {i+1}')
-            if st.checkbox(
-                curve_name, 
-                value=True, 
-                key=f"select_curve_{i}",
-                help=f"Toggle {curve_name} for plotting"
-            ):
-                selected_data.append(entry)
-            else:
-                all_selected = False
-        st.markdown('</div>', unsafe_allow_html=True)
+    cols = st.columns(num_cols)
     
-    with col_select2:
-        st.markdown('<div class="curve-selector">')
-        for i, entry in enumerate(data[len(data)//3 + 1:2*(len(data)//3) + 1]):
-            curve_name = entry.get('name', f'Curve {i+1}')
-            if st.checkbox(
-                curve_name, 
-                value=True, 
-                key=f"select_curve_{i}",
-                help=f"Toggle {curve_name} for plotting"
-            ):
-                selected_data.append(entry)
-            else:
-                all_selected = False
-        st.markdown('</div>', unsafe_allow_html=True)
-    
-    with col_select3:
-        st.markdown('<div class="curve-selector">')
-        for i, entry in enumerate(data[2*(len(data)//3) + 1:]):
-            curve_name = entry.get('name', f'Curve {i+1}')
-            if st.checkbox(
-                curve_name, 
-                value=True, 
-                key=f"select_curve_{i}",
-                help=f"Toggle {curve_name} for plotting"
-            ):
-                selected_data.append(entry)
-            else:
-                all_selected = False
-        st.markdown('</div>', unsafe_allow_html=True)
+    for col_idx in range(num_cols):
+        with cols[col_idx]:
+            st.markdown(f'<div class="curve-selector">', unsafe_allow_html=True)
+            start_idx = col_idx * curves_per_col
+            end_idx = start_idx + curves_per_col
+            for i in range(start_idx, min(end_idx, len(data))):
+                entry = data[i]
+                curve_name = entry.get('name', f'Curve {i+1}')
+                if st.checkbox(
+                    curve_name, 
+                    value=True, 
+                    key=f"select_curve_{i}",
+                    help=f"Toggle {curve_name} for plotting"
+                ):
+                    selected_data.append(entry)
+            st.markdown('</div>', unsafe_allow_html=True)
     
     # Select All/None buttons
     col_btn1, col_btn2 = st.columns(2)
     with col_btn1:
         if st.button("✅ Select All Curves", key="select_all", use_container_width=True):
+            # This will trigger rerun with all checkboxes checked (default behavior)
             st.rerun()
     with col_btn2:
         if st.button("❌ Deselect All Curves", key="deselect_all", use_container_width=True):
+            # Clear selected data and rerun
+            selected_data.clear()
             st.rerun()
     
     # Summary
+    num_selected = len(selected_data)
     st.markdown(f"""
     <div class="info-box">
-        📊 **Summary:** {len(selected_data)} of {len(data)} curves selected for plotting
+        📊 **Summary:** {num_selected} of {len(data)} curves selected for plotting
     </div>
     """, unsafe_allow_html=True)
     
-    if not selected_data:
+    if num_selected == 0:
         st.markdown("""
         <div class="error-box">
             ❌ Please select at least one curve to plot
@@ -251,7 +231,6 @@ if data:
         """, unsafe_allow_html=True)
         st.stop()
 else:
-    selected_data = []
     st.markdown("""
     <div class="warning-box">
         ⚠️ No data loaded. Please upload an Excel file to continue.
@@ -281,7 +260,7 @@ with col_style1:
             "Number of Colors", 
             min_value=5, 
             max_value=50, 
-            value=35, 
+            value=min(35, len(selected_data)), 
             key="num_colors"
         )
     else:
@@ -322,7 +301,7 @@ with col_analytics1:
     intersect_mode = st.checkbox(
         "🔍 Enable Intersection Finder", 
         value=False, 
-        help="Find and mark collision points between curves",
+        help="Find and mark collision points between curves (only works in 'All in One' mode)",
         key="intersect_mode"
     )
 
@@ -493,10 +472,12 @@ if st.button("📊 Generate Plot", type="primary", use_container_width=True):
                 </div>
                 """, unsafe_allow_html=True)
             else:
+                success_msg = f"✅ Generated {len(figs)} plot{'s' if len(figs) > 1 else ''}"
+                if intersect_mode and plot_grouping == "All in One":
+                    success_msg += " with intersection points!"
                 st.markdown(f"""
                 <div class="success-box">
-                    ✅ Generated {len(figs)} plot{'s' if len(figs) > 1 else ''}
-                    {' with intersection points!' if intersect_mode and plot_grouping == "All in One" else ''}
+                    {success_msg}
                 </div>
                 """, unsafe_allow_html=True)
                 
