@@ -26,6 +26,7 @@ st.markdown("""
     .error-box {background-color: #f8d7da; padding: 1rem; border-radius: 0.5rem; border-left: 4px solid #dc3545;}
     .stNumberInput > div > div > div > div {width: 100%;}
     .curve-selector {background-color: #f8f9fa; padding: 1rem; border-radius: 0.5rem; margin: 0.5rem 0;}
+    .curve-checkbox {margin: 0.3rem 0;}
 </style>
 """, unsafe_allow_html=True)
 
@@ -140,80 +141,128 @@ with col_upload1:
         help="Upload your polynomial data", 
         key="uploaded_file"
     )
-with col_upload2:
-    if uploaded_file is not None:
-        if st.button("👁️ Preview Data", key="preview_button", use_container_width=True):
-            with st.spinner("Previewing data..."):
-                preview_file = BytesIO(uploaded_file.read())
-                preview_file.seek(0)
-                preview_result = preview_data(preview_file, max_rows=3)
-                
-                if "error" not in preview_result:
-                    with st.container():
-                        st.markdown(""" 
-                        <div class="success-box">
-                            ✅ Data Preview Successful
-                        </div>
-                        """, unsafe_allow_html=True)
-                        col1, col2 = st.columns(2)
-                        with col1:
-                            st.metric("Rows", preview_result["rows"])
-                            st.metric("Columns", preview_result["columns"])
-                        with col2:
-                            sample_row = preview_result["first_row"][:6] if preview_result["first_row"] else []
-                            st.write("**Sample Row:**", sample_row)
-                            if "sample_data" in preview_result:
-                                st.write("**Sample Data:**")
-                                st.dataframe(pd.DataFrame(preview_result["sample_data"]))
-                else:
-                    st.markdown(f""" 
-                    <div class="error-box">
-                        ❌ Preview Error: {preview_result["error"]}
-                    </div>
-                    """, unsafe_allow_html=True)
 
-# Handle no file upload
-if not uploaded_file:
-    if not debug:
-        st.markdown(""" 
-        <div class="warning-box">
-            ⚠️ No File Uploaded: Please upload an Excel file to generate plots
+# Load data immediately after upload
+data = []
+if uploaded_file is not None:
+    with st.spinner("Loading data..."):
+        uploaded_file.seek(0)
+        data, _ = load_reference_data(uploaded_file, debug=debug)
+        
+        if data:
+            st.markdown("""
+            <div class="success-box">
+                ✅ Data loaded successfully! Found {len(data)} curve{ 's' if len(data) > 1 else ''}
+            </div>
+            """.format(len=len), unsafe_allow_html=True)
+        else:
+            st.markdown("""
+            <div class="error-box">
+                ❌ No valid data found in the file. Please check the Excel format.
+            </div>
+            """, unsafe_allow_html=True)
+            st.stop()
+elif debug:
+    with st.spinner("Loading sample data..."):
+        data, debug_info = load_reference_data(None, debug=True)
+        if debug_info:
+            st.markdown("""
+            <div class="success-box">
+                🧪 Debug Mode: Using sample data ({len(data)} curves)
+            </div>
+            """.format(len=len(data)), unsafe_allow_html=True)
+
+# Curve Selection Section (replaces data preview)
+if data:
+    st.markdown('<h2 class="section-header">🗂️ Select Curves to Plot</h2>', unsafe_allow_html=True)
+    
+    # Create curve selection checkboxes
+    selected_data = []
+    all_selected = True
+    
+    col_select1, col_select2, col_select3 = st.columns(3)
+    
+    with col_select1:
+        st.markdown('<div class="curve-selector">')
+        for i, entry in enumerate(data[:len(data)//3 + 1]):
+            curve_name = entry.get('name', f'Curve {i+1}')
+            if st.checkbox(
+                curve_name, 
+                value=True, 
+                key=f"select_curve_{i}",
+                help=f"Toggle {curve_name} for plotting"
+            ):
+                selected_data.append(entry)
+            else:
+                all_selected = False
+        st.markdown('</div>', unsafe_allow_html=True)
+    
+    with col_select2:
+        st.markdown('<div class="curve-selector">')
+        for i, entry in enumerate(data[len(data)//3 + 1:2*(len(data)//3) + 1]):
+            curve_name = entry.get('name', f'Curve {i+1}')
+            if st.checkbox(
+                curve_name, 
+                value=True, 
+                key=f"select_curve_{i}",
+                help=f"Toggle {curve_name} for plotting"
+            ):
+                selected_data.append(entry)
+            else:
+                all_selected = False
+        st.markdown('</div>', unsafe_allow_html=True)
+    
+    with col_select3:
+        st.markdown('<div class="curve-selector">')
+        for i, entry in enumerate(data[2*(len(data)//3) + 1:]):
+            curve_name = entry.get('name', f'Curve {i+1}')
+            if st.checkbox(
+                curve_name, 
+                value=True, 
+                key=f"select_curve_{i}",
+                help=f"Toggle {curve_name} for plotting"
+            ):
+                selected_data.append(entry)
+            else:
+                all_selected = False
+        st.markdown('</div>', unsafe_allow_html=True)
+    
+    # Select All/None buttons
+    col_btn1, col_btn2 = st.columns(2)
+    with col_btn1:
+        if st.button("✅ Select All Curves", key="select_all", use_container_width=True):
+            st.rerun()
+    with col_btn2:
+        if st.button("❌ Deselect All Curves", key="deselect_all", use_container_width=True):
+            st.rerun()
+    
+    # Summary
+    st.markdown(f"""
+    <div class="info-box">
+        📊 **Summary:** {len(selected_data)} of {len(data)} curves selected for plotting
+    </div>
+    """, unsafe_allow_html=True)
+    
+    if not selected_data:
+        st.markdown("""
+        <div class="error-box">
+            ❌ Please select at least one curve to plot
         </div>
         """, unsafe_allow_html=True)
         st.stop()
-    else:
-        st.markdown("""
-        <div class="success-box">
-            🧪 Debug Mode: Using sample data
-        </div>
-        """, unsafe_allow_html=True)
-        uploaded_file = None
-
-# Load data and show curve selection
-data = []
-if uploaded_file is not None:
-    uploaded_file.seek(0)
-    data, _ = load_reference_data(uploaded_file, debug=debug)
-elif debug:
-    data, debug_info = load_reference_data(None, debug=True)
-    if debug_info:
-        st.markdown("### 🧪 Debug Data Info")
-        for info in debug_info:
-            st.write(info)
+else:
+    selected_data = []
+    st.markdown("""
+    <div class="warning-box">
+        ⚠️ No data loaded. Please upload an Excel file to continue.
+    </div>
+    """, unsafe_allow_html=True)
+    st.stop()
 
 if debug:
     st.markdown("### 🔍 Debug Information")
     st.write("**Loaded Data:**")
     st.json(data)
-
-# Validate data loaded
-if not data:
-    st.markdown("""
-    <div class="error-box">
-        ❌ No valid data loaded. Please check your Excel file format.
-    </div>
-    """, unsafe_allow_html=True)
-    st.stop()
 
 # Plot Configuration Section
 st.markdown('<h2 class="section-header">🎨 Plot Configuration</h2>', unsafe_allow_html=True)
@@ -292,35 +341,6 @@ with col_analytics3:
         help="Calculate and display definite integrals from X Min to X Max",
         key="show_integral"
     )
-
-# Curve Selection for "All in One" mode
-selected_data = data
-if plot_grouping == "All in One" and data:
-    st.markdown('<h2 class="section-header">🗂️ Select Curves to Plot</h2>', unsafe_allow_html=True)
-    st.markdown("""
-    <div class="warning-box">
-        Select which curves to include in the combined plot. Uncheck to exclude curves.
-    </div>
-    """, unsafe_allow_html=True)
-    
-    selected_data = []
-    for i, entry in enumerate(data):
-        curve_name = entry.get('name', f'Curve {i+1}')
-        if st.checkbox(
-            curve_name, 
-            value=True, 
-            key=f"select_curve_{i}",
-            help=f"Toggle {curve_name} for plotting"
-        ):
-            selected_data.append(entry)
-    
-    if not selected_data:
-        st.markdown("""
-        <div class="error-box">
-            ❌ Please select at least one curve to plot
-        </div>
-        """, unsafe_allow_html=True)
-        st.stop()
 
 # Grid and Ticks Section
 st.markdown('<h2 class="section-header">📐 Grid & Ticks</h2>', unsafe_allow_html=True)
