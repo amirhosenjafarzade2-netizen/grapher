@@ -102,8 +102,8 @@ def plot_graphs(data_ref, use_colorful, num_colors, bg_color, legend_loc, custom
         y_finite = y_vals[finite_mask]
         
         # Apply stop logic only if explicitly requested for scaling
-        if not disable_stop_logic and stop_y_exit:
-            y_in_bounds = (y_finite >= y_min) & (y_finite <= y_max) if y_min is not None and y_max is not None else np.ones_like(y_finite, dtype=bool)
+        if not disable_stop_logic and stop_y_exit and y_min is not None and y_max is not None:
+            y_in_bounds = (y_finite >= y_min) & (y_finite <= y_max)
             y_enter = y_in_bounds & ~np.roll(y_in_bounds, 1)
             y_enter[0] = y_in_bounds[0]
             
@@ -309,7 +309,7 @@ def plot_graphs(data_ref, use_colorful, num_colors, bg_color, legend_loc, custom
         handles, labels = ax.get_legend_handles_labels()
         if use_colorful and handles:
             ax.legend(handles, labels, loc=matplotlib_loc, bbox_to_anchor=bbox, fontsize=8, frameon=True, edgecolor='black')
-        elif not use_colorful and ax.texts:
+        elif not use_colorful and hasattr(ax, 'texts') and ax.texts:
             # Create a dummy handle for text-based legends
             from matplotlib.lines import Line2D
             dummy_handle = Line2D([0], [0], color='black', linewidth=2)
@@ -349,6 +349,7 @@ def plot_graphs(data_ref, use_colorful, num_colors, bg_color, legend_loc, custom
 
         # Apply auto-scaling if needed
         final_y_min, final_y_max = y_min, y_max
+        center_y = y_min is not None and y_max is not None and y_min < 0 < y_max
         if auto_scale_y and all_y_vals and successful_plots > 0:
             y_min_new = min(all_y_vals)
             y_max_new = max(all_y_vals)
@@ -360,20 +361,18 @@ def plot_graphs(data_ref, use_colorful, num_colors, bg_color, legend_loc, custom
                 final_y_min = y_min_new - 1
                 final_y_max = y_max_new + 1
             center_y = final_y_min < 0 < final_y_max
-        else:
-            center_y = y_min is not None and y_max is not None and y_min < 0 < y_max
 
-        # Second pass: actual plotting
+        # Second pass: actual plotting - FIXED PARAMETER ORDER
         all_lines = []
         all_texts = []
         for name, entry, color, label, i in plot_data:
-            success, line, plot_data_info = plot_single_curve(ax, entry, color, label, x_min, x_max, 
-                                                             auto_scale_y, stop_y_exit, stop_x_exit, 
-                                                             center_x, center_y, x_pos, y_pos, 
-                                                             x_major_int, x_minor_int, y_major_int, y_minor_int,
-                                                             x_label, y_label, show_grid, grid_major_x, grid_minor_x,
-                                                             grid_major_y, grid_minor_y, invert_y_axis, use_colorful,
-                                                             current_y_min=final_y_min, current_y_max=final_y_max)
+            success, line, plot_data_info = plot_single_curve(
+                ax, entry, color, label, x_min, x_max, final_y_min, final_y_max, 
+                auto_scale_y, stop_y_exit, stop_x_exit, center_x, center_y, x_pos, y_pos, 
+                x_major_int, x_minor_int, y_major_int, y_minor_int, x_label, y_label, 
+                show_grid, grid_major_x, grid_minor_x, grid_major_y, grid_minor_y, 
+                invert_y_axis, use_colorful, current_y_min=final_y_min, current_y_max=final_y_max
+            )
             
             if success:
                 if line:
@@ -384,9 +383,9 @@ def plot_graphs(data_ref, use_colorful, num_colors, bg_color, legend_loc, custom
                         all_texts.extend(ax.texts)
         
         # Adjust text positions if needed
-        if not use_colorful and len(all_texts) > 1:
+        if not use_colorful and len(ax.texts) > 1:
             try:
-                adjust_text(all_texts, ax=ax, only_move={'points': 'y', 'text': 'xy'})
+                adjust_text(ax.texts, ax=ax, only_move={'points': 'y', 'text': 'xy'})
             except:
                 pass  # Gracefully handle adjustText failures
 
@@ -430,13 +429,15 @@ def plot_graphs(data_ref, use_colorful, num_colors, bg_color, legend_loc, custom
                         curve_y_max = y_max_curve + 1
                     center_y = center_y and curve_y_min < 0 < curve_y_max
             
-            success, line, plot_data_info = plot_single_curve(ax, entry, color, label, x_min, x_max, 
-                                                             auto_scale_y, stop_y_exit, stop_x_exit, 
-                                                             center_x, center_y, x_pos, y_pos, 
-                                                             x_major_int, x_minor_int, y_major_int, y_minor_int,
-                                                             x_label, y_label, show_grid, grid_major_x, grid_minor_x,
-                                                             grid_major_y, grid_minor_y, invert_y_axis, use_colorful,
-                                                             title_suffix=name, current_y_min=curve_y_min, current_y_max=curve_y_max)
+            # FIXED: Correct parameter order for single curve plotting
+            success, line, plot_data_info = plot_single_curve(
+                ax, entry, color, label, x_min, x_max, curve_y_min, curve_y_max, 
+                auto_scale_y, stop_y_exit, stop_x_exit, center_x, center_y, x_pos, y_pos, 
+                x_major_int, x_minor_int, y_major_int, y_minor_int, x_label, y_label, 
+                show_grid, grid_major_x, grid_minor_x, grid_major_y, grid_minor_y, 
+                invert_y_axis, use_colorful, title_suffix=name, 
+                current_y_min=curve_y_min, current_y_max=curve_y_max
+            )
             
             if not success:
                 plt.close(fig)
