@@ -7,7 +7,7 @@ import base64
 import numpy as np
 import pandas as pd
 import time
-import zipfile  # Added missing import for ZIP functionality
+import zipfile
 
 # Page configuration
 st.set_page_config(
@@ -25,6 +25,7 @@ st.markdown("""
     .success-box {background-color: #d4edda; padding: 1rem; border-radius: 0.5rem; border-left: 4px solid #28a745;}
     .error-box {background-color: #f8d7da; padding: 1rem; border-radius: 0.5rem; border-left: 4px solid #dc3545;}
     .stNumberInput > div > div > div > div {width: 100%;}
+    .curve-selector {background-color: #f8f9fa; padding: 1rem; border-radius: 0.5rem; margin: 0.5rem 0;}
 </style>
 """, unsafe_allow_html=True)
 
@@ -63,7 +64,7 @@ with col_axis_options[3]:
         key="invert_y_axis"
     )
 
-# FIXED: Y-axis controls with ORIGINAL conditional rendering and layout
+# Y-axis controls with conditional rendering and layout
 col_range1, col_range2, col_range3, col_range4 = st.columns(4)
 with col_range1:
     x_min = st.number_input(
@@ -83,7 +84,7 @@ with col_range2:
 with col_range3:
     if auto_scale_y:
         st.info("📏 Y-axis will be auto-scaled based on data")
-        y_min_input = -1000.0  # Default for auto-scale (but won't be used)
+        y_min_input = -1000.0
     else:
         y_min_input = st.number_input(
             "Y Min", 
@@ -95,7 +96,7 @@ with col_range3:
 with col_range4:
     if auto_scale_y:
         st.info("📏 Y-axis will be auto-scaled based on data")
-        y_max_input = 1000.0  # Default for auto-scale (but won't be used)
+        y_max_input = 1000.0
     else:
         y_max_input = st.number_input(
             "Y Max", 
@@ -143,7 +144,6 @@ with col_upload2:
     if uploaded_file is not None:
         if st.button("👁️ Preview Data", key="preview_button", use_container_width=True):
             with st.spinner("Previewing data..."):
-                # Create a copy for preview to avoid file handle conflicts
                 preview_file = BytesIO(uploaded_file.read())
                 preview_file.seek(0)
                 preview_result = preview_data(preview_file, max_rows=3)
@@ -172,7 +172,7 @@ with col_upload2:
                     </div>
                     """, unsafe_allow_html=True)
 
-# Handle no file upload - FIXED FOR DEBUG MODE
+# Handle no file upload
 if not uploaded_file:
     if not debug:
         st.markdown(""" 
@@ -182,13 +182,38 @@ if not uploaded_file:
         """, unsafe_allow_html=True)
         st.stop()
     else:
-        # Debug mode: generate sample data
         st.markdown("""
         <div class="success-box">
             🧪 Debug Mode: Using sample data
         </div>
         """, unsafe_allow_html=True)
-        uploaded_file = None  # Will trigger debug data generation
+        uploaded_file = None
+
+# Load data and show curve selection
+data = []
+if uploaded_file is not None:
+    uploaded_file.seek(0)
+    data, _ = load_reference_data(uploaded_file, debug=debug)
+elif debug:
+    data, debug_info = load_reference_data(None, debug=True)
+    if debug_info:
+        st.markdown("### 🧪 Debug Data Info")
+        for info in debug_info:
+            st.write(info)
+
+if debug:
+    st.markdown("### 🔍 Debug Information")
+    st.write("**Loaded Data:**")
+    st.json(data)
+
+# Validate data loaded
+if not data:
+    st.markdown("""
+    <div class="error-box">
+        ❌ No valid data loaded. Please check your Excel file format.
+    </div>
+    """, unsafe_allow_html=True)
+    st.stop()
 
 # Plot Configuration Section
 st.markdown('<h2 class="section-header">🎨 Plot Configuration</h2>', unsafe_allow_html=True)
@@ -240,6 +265,63 @@ with col_style2:
         key="custom_legends"
     )
 
+# Advanced Analytics Section
+st.markdown('<h2 class="section-header">🔬 Advanced Analytics</h2>', unsafe_allow_html=True)
+col_analytics1, col_analytics2, col_analytics3 = st.columns(3)
+
+with col_analytics1:
+    intersect_mode = st.checkbox(
+        "🔍 Enable Intersection Finder", 
+        value=False, 
+        help="Find and mark collision points between curves",
+        key="intersect_mode"
+    )
+
+with col_analytics2:
+    plot_deriv = st.checkbox(
+        "📈 Plot Derivatives", 
+        value=False, 
+        help="Show derivative curves as dashed lines",
+        key="plot_deriv"
+    )
+
+with col_analytics3:
+    show_integral = st.checkbox(
+        "📊 Show Integrals in Legend", 
+        value=False, 
+        help="Calculate and display definite integrals from X Min to X Max",
+        key="show_integral"
+    )
+
+# Curve Selection for "All in One" mode
+selected_data = data
+if plot_grouping == "All in One" and data:
+    st.markdown('<h2 class="section-header">🗂️ Select Curves to Plot</h2>', unsafe_allow_html=True)
+    st.markdown("""
+    <div class="warning-box">
+        Select which curves to include in the combined plot. Uncheck to exclude curves.
+    </div>
+    """, unsafe_allow_html=True)
+    
+    selected_data = []
+    for i, entry in enumerate(data):
+        curve_name = entry.get('name', f'Curve {i+1}')
+        if st.checkbox(
+            curve_name, 
+            value=True, 
+            key=f"select_curve_{i}",
+            help=f"Toggle {curve_name} for plotting"
+        ):
+            selected_data.append(entry)
+    
+    if not selected_data:
+        st.markdown("""
+        <div class="error-box">
+            ❌ Please select at least one curve to plot
+        </div>
+        """, unsafe_allow_html=True)
+        st.stop()
+
 # Grid and Ticks Section
 st.markdown('<h2 class="section-header">📐 Grid & Ticks</h2>', unsafe_allow_html=True)
 show_grid = st.checkbox("Show Grid", value=True, key="show_grid")
@@ -247,7 +329,6 @@ col_grid1, col_grid2 = st.columns(2)
 
 with col_grid1:
     st.subheader("X-Axis (Pressure)")
-    # Calculate reasonable defaults based on range
     x_range = abs(x_max - x_min)
     grid_major_x_default = max(1e-10, x_range / 10)
     grid_minor_x_default = max(1e-10, x_range / 50)
@@ -285,9 +366,8 @@ with col_grid1:
 
 with col_grid2:
     st.subheader("Y-Axis (Depth)")
-    # Calculate reasonable defaults based on range
     if auto_scale_y:
-        y_range = 2000  # Default range for auto-scaling
+        y_range = 2000
     else:
         y_range = abs(y_max_input - y_min_input)
     
@@ -329,35 +409,7 @@ with col_grid2:
 if st.button("📊 Generate Plot", type="primary", use_container_width=True):
     with st.spinner("Generating plots..."):
         try:
-            # Reset uploaded file position if needed
-            if uploaded_file is not None:
-                uploaded_file.seek(0)
-            
-            # Load data - FIXED FOR DEBUG MODE
-            if debug and uploaded_file is None:
-                data, debug_info = load_reference_data(None, debug=True)
-                if debug_info:
-                    st.markdown("### 🧪 Debug Data Info")
-                    for info in debug_info:
-                        st.write(info)
-            else:
-                data, _ = load_reference_data(uploaded_file, debug=debug)
-            
-            if debug:
-                st.markdown("### 🔍 Debug Information")
-                st.write("**Loaded Data:**")
-                st.json(data)
-            
-            # Validate data loaded
-            if not data:
-                st.markdown("""
-                <div class="error-box">
-                    ❌ No valid data loaded. Please check your Excel file format.
-                </div>
-                """, unsafe_allow_html=True)
-                st.stop()
-            
-            # FIXED: Determine Y-axis limits for auto-scaling
+            # Determine Y-axis limits for auto-scaling
             if auto_scale_y:
                 y_min_final = None
                 y_max_final = None
@@ -374,9 +426,9 @@ if st.button("📊 Generate Plot", type="primary", use_container_width=True):
             figsize = (12, 8) if plot_grouping == "One per Curve" else (14, 10)
             dpi = 300
             
-            # Call plot_graphs with correct parameter order
+            # Call plot_graphs with all parameters
             figs, skipped_curves = plot_graphs(
-                data_ref=data,
+                data_ref=selected_data,
                 use_colorful=use_colorful,
                 num_colors=num_colors,
                 bg_color=bg_color,
@@ -389,8 +441,8 @@ if st.button("📊 Generate Plot", type="primary", use_container_width=True):
                 grid_minor_y=grid_minor_y,
                 x_min=x_min,
                 x_max=x_max,
-                y_min=y_min_final,  # FIXED: Use None for auto-scaling
-                y_max=y_max_final,  # FIXED: Use None for auto-scaling
+                y_min=y_min_final,
+                y_max=y_max_final,
                 x_pos=x_pos,
                 y_pos=y_pos,
                 x_major_int=x_major_int,
@@ -407,7 +459,10 @@ if st.button("📊 Generate Plot", type="primary", use_container_width=True):
                 debug=debug,
                 invert_y_axis=invert_y_axis,
                 figsize=figsize,
-                dpi=dpi
+                dpi=dpi,
+                intersect_mode=intersect_mode,
+                plot_deriv=plot_deriv,
+                show_integral=show_integral
             )
             
             # Display plots
@@ -421,6 +476,7 @@ if st.button("📊 Generate Plot", type="primary", use_container_width=True):
                 st.markdown(f"""
                 <div class="success-box">
                     ✅ Generated {len(figs)} plot{'s' if len(figs) > 1 else ''}
+                    {' with intersection points!' if intersect_mode and plot_grouping == "All in One" else ''}
                 </div>
                 """, unsafe_allow_html=True)
                 
@@ -435,7 +491,7 @@ if st.button("📊 Generate Plot", type="primary", use_container_width=True):
                     fig.savefig(buf, format='png', bbox_inches='tight', dpi=dpi)
                     buf.seek(0)
                     img_str = base64.b64encode(buf.read()).decode()
-                    safe_name = curve_name.replace(' ', '_').replace('/', '_')[:50]  # Sanitize filename
+                    safe_name = curve_name.replace(' ', '_').replace('/', '_')[:50]
                     st.markdown(f"""
                     <a href="data:image/png;base64,{img_str}" download="curve_plot_{i+1}_{safe_name}.png" style="text-decoration: none; padding: 0.5rem; background-color: #007bff; color: white; border-radius: 0.25rem; display: inline-block;">
                         💾 Download Plot {i+1}: {curve_name}
@@ -483,13 +539,12 @@ if st.button("📊 Generate Plot", type="primary", use_container_width=True):
                 <small>Please check your data format and try again.</small>
             </div>
             """, unsafe_allow_html=True)
-            # Clean up any open figures on error
             plt.close('all')
 
 # Footer
 st.markdown("---")
 st.markdown("""
 <div style='text-align: center; color: #6c757d;'>
-    <p>Advanced Curve Plotter v1.0 | Built with ❤️ using Streamlit & Matplotlib</p>
+    <p>Advanced Curve Plotter v2.0 | Enhanced with Analytics | Built with ❤️ using Streamlit & Matplotlib</p>
 </div>
 """, unsafe_allow_html=True)
