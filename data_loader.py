@@ -14,7 +14,8 @@ def load_reference_data(uploaded_file, debug=False):
         debug: If True, return skipped_rows list for debugging
     
     Returns:
-        List of dicts with 'name' and 'coefficients' keys, and optionally skipped_rows
+        Tuple: (List of dicts with 'name' and 'coefficients' keys, list of skipped rows)
+        When debug=False, second element is empty list []
     """
     data_ref = []
     skipped_rows = []
@@ -54,9 +55,10 @@ def load_reference_data(uploaded_file, debug=False):
             print("Skipped rows:")
             for skip in skipped_rows:
                 print(f"  - {skip}")
-        return data_ref, skipped_rows
     
-    return data_ref
+    # FIXED: Always return 2 values for consistency
+    # When debug=False, skipped_rows is empty list []
+    return data_ref, skipped_rows
 
 
 def process_row(row, index, data_ref, skipped_rows, max_degree, debug=False):
@@ -202,9 +204,11 @@ def validate_polynomial(coefficients, name=""):
     
     # Check conditioning (simple heuristic)
     if degree > 3:
-        coeff_ratio = np.max(np.abs(coeffs)) / np.min(np.abs(coeffs[coeffs != 0]))
-        if coeff_ratio > 1e10:
-            return True, f"{name}: Poorly conditioned polynomial (coeff ratio: {coeff_ratio:.2e})"
+        non_zero_coeffs = coeffs[coeffs != 0]
+        if len(non_zero_coeffs) > 1:
+            coeff_ratio = np.max(np.abs(non_zero_coeffs)) / np.min(np.abs(non_zero_coeffs))
+            if coeff_ratio > 1e10:
+                return True, f"{name}: Poorly conditioned polynomial (coeff ratio: {coeff_ratio:.2e})"
     
     return True, f"{name}: Valid polynomial"
 
