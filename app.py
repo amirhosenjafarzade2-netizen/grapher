@@ -1,6 +1,6 @@
 import streamlit as st
 import matplotlib.pyplot as plt
-from data_loader import load_reference_data, preview_data
+from data_loader import load_reference_data
 from plotter import plot_graphs
 from io import BytesIO
 import base64
@@ -27,7 +27,6 @@ st.markdown("""
     .info-box {background-color: #d1ecf1; padding: 1rem; border-radius: 0.5rem; border-left: 4px solid #17a2b8;}
     .stNumberInput > div > div > div > div {width: 100%;}
     .curve-selector {background-color: #f8f9fa; padding: 1rem; border-radius: 0.5rem; margin: 0.5rem 0;}
-    .curve-checkbox {margin: 0.3rem 0;}
     .selection-mode {background-color: #e9ecef; padding: 1rem; border-radius: 0.5rem; margin: 0.5rem 0;}
 </style>
 """, unsafe_allow_html=True)
@@ -128,33 +127,26 @@ if not auto_scale_y and y_min_input >= y_max_input:
 # Data Upload Section
 st.markdown('<h2 class="section-header">📁 Data Upload</h2>', unsafe_allow_html=True)
 
-col_upload1, col_upload2 = st.columns([3, 1])
-with col_upload1:
-    st.markdown("""
-    **Excel Format:**
-    - Column A: Curve Name (e.g., 'Curve1')
-    - Column B+: Coefficients (highest degree first)
-    - Maximum polynomial degree: 10
-    - Handles any range automatically (from -10000 to 10000 and beyond)
-    """)
-    uploaded_file = st.file_uploader(
-        "Choose Excel file", 
-        type=['xlsx', 'xls'], 
-        help="Upload your polynomial data", 
-        key="uploaded_file"
-    )
+uploaded_file = st.file_uploader(
+    "Choose Excel file", 
+    type=['xlsx', 'xls'], 
+    help="Upload your polynomial data", 
+    key="uploaded_file"
+)
 
 # Load data immediately after upload
 data = []
+skipped_info = []
+
 if uploaded_file is not None:
     with st.spinner("Loading data..."):
         uploaded_file.seek(0)
-        data, _ = load_reference_data(uploaded_file, debug=debug)
+        data, skipped_info = load_reference_data(uploaded_file, debug=debug)
         
         if data:
             st.markdown(f"""
             <div class="success-box">
-                ✅ Data loaded successfully! Found {len(data)} curves
+                ✅ Data loaded successfully! Found {len(data)} valid curves
             </div>
             """, unsafe_allow_html=True)
         else:
@@ -163,16 +155,23 @@ if uploaded_file is not None:
                 ❌ No valid data found in the file. Please check the Excel format.
             </div>
             """, unsafe_allow_html=True)
+            if skipped_info:
+                st.markdown(f"""
+                <div class="warning-box">
+                    <strong>Validation Issues:</strong><br>
+                    {', '.join(skipped_info[:3])}
+                    {'<br><em>...and {len(skipped_info)-3} more issues</em>' if len(skipped_info) > 3 else ''}
+                </div>
+                """, unsafe_allow_html=True)
             st.stop()
 elif debug:
     with st.spinner("Loading sample data..."):
-        data, debug_info = load_reference_data(None, debug=True)
-        if debug_info:
-            st.markdown(f"""
-            <div class="success-box">
-                🧪 Debug Mode: Using sample data ({len(data)} curves)
-            </div>
-            """, unsafe_allow_html=True)
+        data, skipped_info = load_reference_data(None, debug=True)
+        st.markdown(f"""
+        <div class="success-box">
+            🧪 Debug Mode: Using sample data ({len(data)} curves)
+        </div>
+        """, unsafe_allow_html=True)
 
 # Stop if no data
 if not data:
@@ -187,6 +186,10 @@ if debug:
     st.markdown("### 🔍 Debug Information")
     st.write("**Loaded Data:**")
     st.json(data)
+    if skipped_info:
+        st.markdown("**Skipped Rows:**")
+        for skip in skipped_info[:10]:  # Show first 10
+            st.write(f"• {skip}")
 
 # Curve Selection Mode
 st.markdown('<h2 class="section-header">🗂️ Plot Selection Mode</h2>', unsafe_allow_html=True)
@@ -687,6 +690,6 @@ if st.button("📊 Generate Plot", type="primary", use_container_width=True):
 st.markdown("---")
 st.markdown("""
 <div style='text-align: center; color: #6c757d;'>
-    <p>Advanced Curve Plotter v2.1 | Enhanced Selection & Analytics | Built with ❤️ using Streamlit & Matplotlib</p>
+    <p>Advanced Curve Plotter v2.1 | Clean & Fixed | Built with ❤️ using Streamlit & Matplotlib</p>
 </div>
 """, unsafe_allow_html=True)
