@@ -35,8 +35,8 @@ def load_reference_data(uploaded_file, debug=False):
                     skipped_rows.append(f"Excel file has only {df_ref.shape[1]} column(s). Need at least 2 (name + coefficients)")
                 else:
                     for index, row in df_ref.iterrows():
-                        # Process each row
-                        process_row(row, index, data_ref, skipped_rows, MAX_DEGREE)
+                        # Process each row - PASS DEBUG PARAMETER
+                        process_row(row, index, data_ref, skipped_rows, MAX_DEGREE, debug)
                         
         except Exception as e:
             skipped_rows.append(f"Excel parsing failed: {str(e)}")
@@ -59,7 +59,7 @@ def load_reference_data(uploaded_file, debug=False):
     return data_ref
 
 
-def process_row(row, index, data_ref, skipped_rows, max_degree):
+def process_row(row, index, data_ref, skipped_rows, max_degree, debug=False):
     """Process a single data row and validate its contents."""
     # Extract and clean name
     name_raw = row[0] if pd.notna(row[0]) else None
