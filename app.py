@@ -78,30 +78,26 @@ with col_range2:
         key="x_max_range"
     )
 
-# Y-axis controls with conditional rendering
-with col_range3:
-    if auto_scale_y:
-        st.info("📏 Y-axis will be auto-scaled based on data")
-        y_min_input = -1000.0  # Default for auto-scale
-    else:
-        y_min_input = st.number_input(
-            "Y Min", 
-            value=-1000.0, 
-            help="Minimum Y value (Depth, ft) - can be negative",
-            key="y_min_range"
-        )
-
-with col_range4:
-    if auto_scale_y:
-        st.info("📏 Y-axis will be auto-scaled based on data")
-        y_max_input = 1000.0  # Default for auto-scale
-    else:
-        y_max_input = st.number_input(
-            "Y Max", 
-            value=1000.0, 
-            help="Maximum Y value (Depth, ft)",
-            key="y_max_range"
-        )
+# Y-axis controls with conditional rendering - FIXED SCOPE ISSUES
+if auto_scale_y:
+    st.info("📏 Y-axis will be auto-scaled based on data")
+    y_min_input = None  # For auto-scaling, pass None to plotter
+    y_max_input = None
+else:
+    col_range3.write("Y Min")
+    y_min_input = st.number_input(
+        "Y Min", 
+        value=-1000.0, 
+        help="Minimum Y value (Depth, ft) - can be negative",
+        key="y_min_range"
+    )
+    col_range4.write("Y Max")
+    y_max_input = st.number_input(
+        "Y Max", 
+        value=1000.0, 
+        help="Maximum Y value (Depth, ft)",
+        key="y_max_range"
+    )
 
 # Range validation
 if x_min >= x_max:
@@ -112,7 +108,7 @@ if x_min >= x_max:
     """, unsafe_allow_html=True)
     st.stop()
 
-if not auto_scale_y and y_min_input >= y_max_input:
+if not auto_scale_y and y_min_input is not None and y_max_input is not None and y_min_input >= y_max_input:
     st.markdown("""
     <div class="error-box">
         <strong>❌ Invalid Y Range:</strong> Y Max must be greater than Y Min
@@ -140,13 +136,19 @@ with col_upload1:
     )
 with col_upload2:
     if uploaded_file is not None:
-        if st.button("👁️ Preview Data", key="preview_button"):
+        if st.button("👁️ Preview Data", key="preview_button", use_container_width=True):
             with st.spinner("Previewing data..."):
-                preview_result = preview_data(uploaded_file, max_rows=3)
+                # Create a copy for preview to avoid file handle conflicts
+                preview_file = BytesIO(uploaded_file.read())
+                preview_file.seek(0)
+                preview_result = preview_data(preview_file, max_rows=3)
+                
                 if "error" not in preview_result:
                     with st.container():
                         st.markdown(""" 
-                        ✅ Data Preview: 
+                        <div class="success-box">
+                            ✅ Data Preview Successful
+                        </div>
                         """, unsafe_allow_html=True)
                         col1, col2 = st.columns(2)
                         with col1:
@@ -155,17 +157,33 @@ with col_upload2:
                         with col2:
                             sample_row = preview_result["first_row"][:6] if preview_result["first_row"] else []
                             st.write("**Sample Row:**", sample_row)
+                            if "sample_data" in preview_result:
+                                st.write("**Sample Data:**")
+                                st.dataframe(pd.DataFrame(preview_result["sample_data"]))
                 else:
                     st.markdown(f""" 
-                    ❌ Preview Error: {preview_result["error"]} 
+                    <div class="error-box">
+                        ❌ Preview Error: {preview_result["error"]}
+                    </div>
                     """, unsafe_allow_html=True)
 
-# Handle no file upload
-if not uploaded_file and not debug:
-    st.markdown(""" 
-    ⚠️ No File Uploaded: Please upload an Excel file to generate plots 
-    """, unsafe_allow_html=True)
-    st.stop()
+# Handle no file upload - FIXED FOR DEBUG MODE
+if not uploaded_file:
+    if not debug:
+        st.markdown(""" 
+        <div class="warning-box">
+            ⚠️ No File Uploaded: Please upload an Excel file to generate plots
+        </div>
+        """, unsafe_allow_html=True)
+        st.stop()
+    else:
+        # Debug mode: generate sample data
+        st.markdown("""
+        <div class="success-box">
+            🧪 Debug Mode: Using sample data
+        </div>
+        """, unsafe_allow_html=True)
+        uploaded_file = None  # Will trigger debug data generation
 
 # Plot Configuration Section
 st.markdown('<h2 class="section-header">🎨 Plot Configuration</h2>', unsafe_allow_html=True)
@@ -266,7 +284,7 @@ with col_grid2:
     if auto_scale_y:
         y_range = 2000  # Default range for auto-scaling
     else:
-        y_range = abs(y_max_input - y_min_input)
+        y_range = abs(y_max_input - y_min_input) if y_max_input is not None and y_min_input is not None else 2000
     
     grid_major_y_default = max(1e-10, y_range / 10)
     grid_minor_y_default = max(1e-10, y_range / 50)
@@ -303,24 +321,44 @@ with col_grid2:
     )
 
 # Generate Plot Button
-if st.button("📊 Generate Plot", type="primary"):
+if st.button("📊 Generate Plot", type="primary", use_container_width=True):
     with st.spinner("Generating plots..."):
         try:
-            # Load data
-            data = load_reference_data(uploaded_file)
+            # Reset uploaded file position if needed
+            if uploaded_file is not None:
+                uploaded_file.seek(0)
+            
+            # Load data - FIXED FOR DEBUG MODE
+            if debug and uploaded_file is None:
+                data, debug_info = load_reference_data(None, debug=True)
+                if debug_info:
+                    st.markdown("### 🧪 Debug Data Info")
+                    for info in debug_info:
+                        st.write(info)
+            else:
+                data, _ = load_reference_data(uploaded_file, debug=debug)
             
             if debug:
                 st.markdown("### 🔍 Debug Information")
-                st.write("Loaded Data:")
-                st.write(data)
+                st.write("**Loaded Data:**")
+                st.json(data)
             
-            # Determine Y-axis limits
+            # Validate data loaded
+            if not data:
+                st.markdown("""
+                <div class="error-box">
+                    ❌ No valid data loaded. Please check your Excel file format.
+                </div>
+                """, unsafe_allow_html=True)
+                st.stop()
+            
+            # Determine Y-axis limits - FIXED FOR AUTO-SCALING
             if auto_scale_y:
-                y_min = None
-                y_max = None
+                y_min_final = None
+                y_max_final = None
             else:
-                y_min = y_min_input
-                y_max = y_max_input
+                y_min_final = y_min_input
+                y_max_final = y_max_input
             
             # Default values for missing parameters
             x_pos = "bottom"
@@ -328,7 +366,7 @@ if st.button("📊 Generate Plot", type="primary"):
             title = "Polynomial Curves"
             x_label = "Pressure (psi)"
             y_label = "Depth (ft)"
-            figsize = (10, 6)
+            figsize = (12, 8) if plot_grouping == "One per Curve" else (14, 10)
             dpi = 300
             
             # Call plot_graphs with correct parameter order
@@ -346,8 +384,8 @@ if st.button("📊 Generate Plot", type="primary"):
                 grid_minor_y=grid_minor_y,
                 x_min=x_min,
                 x_max=x_max,
-                y_min=y_min,
-                y_max=y_max,
+                y_min=y_min_final,  # FIXED: Use None for auto-scaling
+                y_max=y_max_final,  # FIXED: Use None for auto-scaling
                 x_pos=x_pos,
                 y_pos=y_pos,
                 x_major_int=x_major_int,
@@ -368,39 +406,80 @@ if st.button("📊 Generate Plot", type="primary"):
             )
             
             # Display plots
-            for i, (fig, curve_name) in enumerate(figs):
-                st.subheader(f"Plot {i+1}" + (f": {curve_name}" if plot_grouping == "One per Curve" else ""))
-                st.pyplot(fig)
-                
-                # Download button for individual plots
-                buf = BytesIO()
-                fig.savefig(buf, format='png', bbox_inches='tight')
-                buf.seek(0)
-                img_str = base64.b64encode(buf.read()).decode()
+            if not figs:
+                st.markdown("""
+                <div class="warning-box">
+                    ⚠️ No plots generated. Check the skipped curves below.
+                </div>
+                """, unsafe_allow_html=True)
+            else:
                 st.markdown(f"""
-                <a href="data:image/png;base64,{img_str}" download="curve_plot_{i+1}_{curve_name.replace(' ', '_')}.png">
-                    💾 Download Plot {i+1}: {curve_name}
-                </a>
+                <div class="success-box">
+                    ✅ Generated {len(figs)} plot{'s' if len(figs) > 1 else ''}
+                </div>
                 """, unsafe_allow_html=True)
                 
-                # Close the figure to free memory
-                plt.close(fig)
+                for i, (fig, curve_name) in enumerate(figs):
+                    st.subheader(f"Plot {i+1}" + (f": {curve_name}" if plot_grouping == "One per Curve" else ""))
+                    
+                    # Display plot
+                    st.pyplot(fig)
+                    
+                    # Download button for individual plots
+                    buf = BytesIO()
+                    fig.savefig(buf, format='png', bbox_inches='tight', dpi=dpi)
+                    buf.seek(0)
+                    img_str = base64.b64encode(buf.read()).decode()
+                    safe_name = curve_name.replace(' ', '_').replace('/', '_')[:50]  # Sanitize filename
+                    st.markdown(f"""
+                    <a href="data:image/png;base64,{img_str}" download="curve_plot_{i+1}_{safe_name}.png" style="text-decoration: none; padding: 0.5rem; background-color: #007bff; color: white; border-radius: 0.25rem; display: inline-block;">
+                        💾 Download Plot {i+1}: {curve_name}
+                    </a>
+                    """, unsafe_allow_html=True)
+                    
+                    # Close the figure to free memory
+                    plt.close(fig)
+                
+                # Bulk download option
+                if len(figs) > 1:
+                    st.markdown("### 📦 Bulk Download")
+                    zip_buffer = BytesIO()
+                    with zipfile.ZipFile(zip_buffer, 'w', zipfile.ZIP_DEFLATED) as zip_file:
+                        for i, (fig, curve_name) in enumerate(figs):
+                            buf = BytesIO()
+                            fig.savefig(buf, format='png', bbox_inches='tight', dpi=dpi)
+                            buf.seek(0)
+                            safe_name = f"curve_plot_{i+1}_{curve_name.replace(' ', '_').replace('/', '_')[:50]}.png"
+                            zip_file.writestr(safe_name, buf.getvalue())
+                    
+                    zip_buffer.seek(0)
+                    zip_str = base64.b64encode(zip_buffer.read()).decode()
+                    st.markdown(f"""
+                    <a href="data:application/zip;base64,{zip_str}" download="curve_plots.zip" style="text-decoration: none; padding: 0.5rem; background-color: #28a745; color: white; border-radius: 0.25rem; display: inline-block;">
+                        📦 Download All Plots as ZIP
+                    </a>
+                    """, unsafe_allow_html=True)
             
             # Show skipped curves if any
             if skipped_curves:
                 st.markdown(f"""
                 <div class="warning-box">
-                    <strong>⚠️ Skipped Curves:</strong><br>
-                    {', '.join(skipped_curves[:3])}{'...' if len(skipped_curves) > 3 else ''}
+                    <strong>⚠️ Skipped Curves ({len(skipped_curves)}):</strong><br>
+                    {', '.join([f'<span style="display: block;">• {s}</span>' for s in skipped_curves[:5]])}
+                    {'<br><em>...and {len(skipped_curves)-5} more</em>' if len(skipped_curves) > 5 else ''}
                 </div>
                 """, unsafe_allow_html=True)
                 
         except Exception as e:
             st.markdown(f"""
             <div class="error-box">
-                <strong>❌ Plot Generation Error:</strong> {str(e)}
+                <strong>❌ Plot Generation Error:</strong><br>
+                <code>{str(e)}</code><br>
+                <small>Please check your data format and try again.</small>
             </div>
             """, unsafe_allow_html=True)
+            # Clean up any open figures on error
+            plt.close('all')
 
 # Footer
 st.markdown("---")
